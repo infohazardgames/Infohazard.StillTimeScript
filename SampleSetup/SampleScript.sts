@@ -1,0 +1,46 @@
+﻿// this is a comment
+scope(Scope_Run)
+scope(Scope_Global)
+var(bool, Gate1, Scope_Run)
+var(num, Gate2, Scope_Run)
+bg(#aaaaaa)
+goto(NodeName)
+
+label(NodeName)
+    say: this is the text that is being spoken\
+    it can extend to multiple lines if the previous line ends with a backslash
+    push(PushLabel)
+    branch: this is the text shown at the top
+        choice(NodeName2): this is the text shown for the choice
+        choice(NodeName3, Gate1): this choice is only visible if gate1 is unlocked (1)
+        choice(NodeName4, Gate1): this choice is only visible if gate1 is unlocked (2)
+        choice(NodeName5, Gate2 >= 2): this choice is only visible if gate2 is > 2
+    end
+end
+
+label(NodeName2)
+    set(Gate1, true)
+    say: Gate1 is now unlocked.
+    goto(NodeName)
+end
+
+label(NodeName3)
+    say: Incrementing gate2.
+    incr(Gate2, 1)
+    goto(NodeName)
+end
+
+label(NodeName4)
+    say: Incrementing gate2.
+    incr(Gate2, 1)
+    goto(NodeName)
+end
+
+label(NodeName5)
+    say: End of test
+end
+
+label(PushLabel)
+    say: This is a pushed label
+    pop
+end

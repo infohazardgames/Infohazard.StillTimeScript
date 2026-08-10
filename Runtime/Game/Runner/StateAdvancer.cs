@@ -20,11 +20,14 @@ namespace Infohazard.StillTimeScript.Game.Runner {
 
             currentComponent.CurrentNode.ApplyBeforeAdvanceFromSelf(graph, newState, ref nextNode);
             currentComponent.CurrentNode = nextNode;
-            visitedComponent.VisitNode(nextNode, true);
-            nextNode?.ApplyAfterAdvanceToSelf(graph, newState);
 
-            foreach (StateProcessor stateProcessor in _stateProcessors) {
-                stateProcessor.ProcessAfterAdvance(graph, newState);
+            if (nextNode != null) {
+                visitedComponent.VisitNode(nextNode, true);
+                nextNode.ApplyAfterAdvanceToSelf(graph, newState);
+
+                foreach (StateProcessor stateProcessor in _stateProcessors) {
+                    stateProcessor.ProcessAfterAdvance(graph, newState);
+                }
             }
 
             return newState;

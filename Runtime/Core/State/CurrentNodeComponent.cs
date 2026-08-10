@@ -17,7 +17,7 @@ namespace Infohazard.StillTimeScript.Core.State {
 
         public JToken Serialize() {
             SerializedData data = new() {
-                CurrentNode = CurrentNode.FullIdentifier,
+                CurrentNode = CurrentNode?.FullIdentifier ?? string.Empty,
                 Stack = NodeStack.Select(n => n.FullIdentifier).ToList(),
             };
 
