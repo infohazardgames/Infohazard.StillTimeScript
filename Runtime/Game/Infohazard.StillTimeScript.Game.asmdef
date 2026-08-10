@@ -1,0 +1,19 @@
+{
+    "name": "Infohazard.StillTimeScript.Game",
+    "rootNamespace": "Infohazard.StillTimeScript",
+    "references": [
+        "GUID:6e6eabb6dbfd0c64296bf63916880825",
+        "GUID:574362b15decf30448ab74b2ee336afb",
+        "GUID:f51ebe6a0ceec4240a699833d6309b23",
+        "GUID:6055be8ebefd69e48b49212b09b47b2f"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,19 @@
+{
+    "name": "Infohazard.StillTimeScript.Editor",
+    "rootNamespace": "StillTime",
+    "references": [
+        "GUID:574362b15decf30448ab74b2ee336afb",
+        "GUID:51834ea7e3b51e1408e39b2e79db37b9"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
