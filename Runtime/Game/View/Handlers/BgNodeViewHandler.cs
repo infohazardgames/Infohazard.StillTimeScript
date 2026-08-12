@@ -19,7 +19,7 @@ namespace Infohazard.StillTimeScript.Game.View.Handlers {
             BgNode node,
             CancellationToken cancellationToken) {
             StsColor color = node.Color.Evaluate(state).ColorValue;
-            float time = (float) node.Time.Evaluate(state).NumberValue;
+            float time = (float) (node.Time?.Evaluate(state).NumberValue ?? 0);
 
             _view.SetColor(color, _gameSettings.SkipAnimations ? 0 : time);
             return UniTask.FromResult(node.Next);
