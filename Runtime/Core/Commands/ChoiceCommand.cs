@@ -6,29 +6,23 @@ using Infohazard.StillTimeScript.Core.Parsers;
 using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Commands {
+    [AutoCommandParser("choice", 1, 2, true)]
     public class ChoiceCommand : TextCommand, IBranchSubCommand {
-        public string TargetLabel { get; }
-        public string Condition { get; }
+        public string TargetStr { get; }
+        public string ConditionStr { get; }
 
-        public ChoiceCommand(
-            int lineNumber,
-            string line,
-            string text,
-            string targetLabel,
-            string condition = null) :
-            base(lineNumber, line, null, text) {
-            TargetLabel = targetLabel;
-            Condition = condition;
+        public ChoiceCommand(LineTokens tokens) : base(tokens, null, tokens.Text) {
+            TargetStr = tokens.GetArg(0);
+            ConditionStr = tokens.GetArg(1);
         }
 
         public void CreateBranchOptions(GraphData graphData, List<IBranchOption> options) {
-            INode targetNode = graphData.GetNode(this, TargetLabel);
-
-            IExpression expression = string.IsNullOrEmpty(Condition)
+            IExpression targetExpr = ExpressionParser.ParseExpression(this, graphData, TargetStr, StsValueType.Node);
+            IExpression condExpr = string.IsNullOrEmpty(ConditionStr)
                 ? null
-                : ExpressionParser.ParseExpression(this, graphData, Condition);
-            
-            Choice choice = new(Text, targetNode, expression);
+                : ExpressionParser.ParseExpression(this, graphData, ConditionStr);
+
+            Choice choice = new(GetTextExpression(graphData), targetExpr, condExpr);
 
             options.Add(choice);
         }

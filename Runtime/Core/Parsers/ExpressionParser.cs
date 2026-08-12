@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
 using Infohazard.StillTimeScript.Core.Commands;
 using Infohazard.StillTimeScript.Core.Expressions;
 using Infohazard.StillTimeScript.Core.Nodes;
@@ -57,6 +59,7 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
 
         private static readonly Dictionary<string, int> BinaryOperatorPrecedenceMap;
         private static readonly List<string> BinaryOperatorParsingPriority;
+        private static readonly Regex StringInterpRegex = new(@"\{([^}]*)\}");
 
         static ExpressionParser() {
             BinaryOperatorPrecedenceMap = new Dictionary<string, int>();
@@ -74,7 +77,89 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             BinaryOperatorParsingPriority.Sort((a, b) => b.Length - a.Length);
         }
 
-        public static IExpression ParseExpression(Command command, GraphData graphData, ReadOnlySpan<char> span) {
+        public static IExpression ParseStringLiteral(Command command, GraphData graphData, ReadOnlySpan<char> span,
+                                                     int index, out int endIndex) {
+
+            bool isEscape = false;
+            for (int i = index; i < span.Length; i++) {
+                char c = span[i];
+
+                if (isEscape) {
+                    isEscape = false;
+                } else if (c == '\\') {
+                    isEscape = true;
+                } else if (c == '"') {
+                    endIndex = i + 1;
+                    string str = span[index..i].ToString();
+                    return ParseStringExpression(command, graphData, str);
+                }
+            }
+
+            throw new ParsingException(command.LineNumber, command.Line, "Encountered non-closed string literal.");
+        }
+
+        public static IExpression ParseStringExpression(Command command, GraphData graphData, string stringExpr) {
+            StringConcatExpression expression = new();
+
+            MatchCollection collection = StringInterpRegex.Matches(stringExpr);
+
+            int curIndex = 0;
+            foreach (Match match in collection) {
+                if (match.Index - curIndex > 0) {
+                    expression.AddExpression(
+                        new ConstantExpression(new StsValue(EscapeString(command, stringExpr[curIndex..match.Index]))));
+                }
+
+                string inner = match.Groups.Count > 1 ? match.Groups[1].Value : string.Empty;
+
+                if (string.IsNullOrWhiteSpace(inner)) {
+                    expression.AddExpression(new ConstantExpression(new StsValue(string.Empty)));
+                } else {
+                    expression.AddExpression(ParseExpression(command, graphData, inner));
+                }
+
+                curIndex = match.Index + match.Length;
+            }
+
+            if (curIndex < stringExpr.Length) {
+                expression.AddExpression(
+                    new ConstantExpression(new StsValue(EscapeString(command, stringExpr[curIndex..]))));
+            }
+
+            return expression;
+        }
+
+        private static string EscapeString(Command command, ReadOnlySpan<char> span) {
+            StringBuilder builder = new();
+
+            bool isEscape = false;
+            for (int i = 0; i < span.Length; i++) {
+                char c = span[i];
+
+                if (isEscape) {
+                    builder.Append(c switch {
+                        '\\' or '"' => c,
+                        'n' => '\n',
+                        't' => '\t',
+                        _ => throw new ParsingException(command.LineNumber, command.Line,
+                                                        $"Invalid escape character '\\{c}'."),
+                    });
+                } else if (c == '\\') {
+                    isEscape = true;
+                } else {
+                    builder.Append(c);
+                }
+            }
+
+            if (isEscape) {
+                throw new ParsingException(command.LineNumber, command.Line, "Invalid escape character '\\'.");
+            }
+
+            return builder.ToString();
+        }
+
+        public static IExpression ParseExpression(Command command, GraphData graphData, ReadOnlySpan<char> span,
+                                                  StsValueType requiredType = StsValueType.None) {
             IExpression expression = ParseExpression(
                 command,
                 graphData,
@@ -86,7 +171,12 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             Tokenizer.SkipWhitespace(span, ref endIndex);
             if (endIndex < span.Length)
                 throw new ParsingException(command.LineNumber, span.ToString(),
-                    $"Unexpected character '{span[endIndex]}'");
+                                           $"Unexpected character '{span[endIndex]}'");
+
+            if (requiredType != StsValueType.None && expression.Type != requiredType) {
+                throw new ParsingException(command.LineNumber, command.Line,
+                                           $"Expected expression of type {requiredType} but found {expression.Type}");
+            }
 
             return expression;
         }
@@ -168,7 +258,8 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                     currentOperand =
                         new BinaryMathExpression(currentOperand, nextOperand, binaryMathOperator);
                 } else if (NumberComparisonOperators.TryGetValue(op,
-                               out NumberComparisonOperator numberComparisonOperator)) {
+                                                                 out NumberComparisonOperator
+                                                                     numberComparisonOperator)) {
                     currentOperand =
                         new NumberCompareExpression(currentOperand, nextOperand, numberComparisonOperator);
                 } else if (EqualityOperators.TryGetValue(op, out EqualityOperator equalityOperator)) {
@@ -211,6 +302,11 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             if (c == '(') {
                 index++;
                 return ParseExpression(command, graphData, span, index, ")", out endIndex);
+            }
+
+            if (c == '"') {
+                index++;
+                return ParseStringLiteral(command, graphData, span, index, out endIndex);
             }
 
             foreach (string funcOp in FunctionOperators) {
@@ -257,25 +353,35 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             int end;
             for (end = index; end < span.Length; end++) {
                 c = span[end];
-                if (!char.IsLetterOrDigit(c) && c != '_') break;
+                if (!char.IsLetterOrDigit(c) && c != '_' && c != '#' && c != '.') break;
             }
 
             ReadOnlySpan<char> item = span[index..end];
             endIndex = end;
-            return ToSingleExpression(graphData, item.ToString());
+            return ParseSingleItemExpression(command, graphData, item.ToString());
         }
 
-        private static IExpression ToSingleExpression(GraphData graphData, string name) {
-            if (graphData.Resources.TryGetValue(name, out Resource.Resource resource)) {
+        private static IExpression ParseSingleItemExpression(Command command, GraphData graphData,
+                                                             ReadOnlySpan<char> item) {
+            if (item.StartsWith("#") && StsColor.TryParseHex(item, out StsColor color)) {
+                return new ConstantExpression(new StsValue(color));
+            } else if (decimal.TryParse(item, out decimal num)) {
+                return new ConstantExpression(new StsValue(num));
+            } else if (bool.TryParse(item, out bool b)) {
+                return new ConstantExpression(new StsValue(b));
+            }
+
+            string itemStr = item.ToString();
+            if (graphData.Resources.TryGetValue(itemStr, out Resource.Resource resource)) {
                 if (resource is Variable variable) {
                     return new VariableExpression(variable);
                 } else {
                     return new ConstantExpression(new StsValue(resource));
                 }
-            } else if (graphData.Nodes.TryGetValue(name, out INode node)) {
+            } else if (graphData.Nodes.TryGetValue(itemStr, out INode node)) {
                 return new ConstantExpression(new StsValue(node));
             } else {
-                return new ConstantExpression(StsValue.Parse(name));
+                throw new ParsingException(command.LineNumber, command.Line, $"Failed to parse value: '{itemStr}'");
             }
         }
     }

@@ -27,18 +27,20 @@ namespace Infohazard.StillTimeScript.Game.View.Handlers {
             Action cancel = () => tcs.TrySetCanceled();
             cancellationToken.Register(cancel);
 
+            string branchText = node.TextExpression.Evaluate(state).StringValue;
             _view.SetChoices(
-                GameUtility.DoStringInterpolation(node.Text, graph, state),
+                branchText,
                 node.Speaker,
+                state,
                 node.Options
                     .Where(o => o.IsAvailable(state))
                     .Select(o => {
                         INode next = o.GetNextNode(state);
-                        string text = o.GetText(state);
+                        string choiceText = o.GetText(state);
                         List<StateContainer> stack = new() { state };
                         StateContainer testState = _stateAdvancer.AdvanceState(graph, state, next);
                         bool hasNewContent = _stateExplorer.ExploreBranchForNewContent(graph, stack, testState, 10_000);
-                        return (text, new Action(() => tcs.TrySetResult(next)), hasNewContent);
+                        return (text: choiceText, new Action(() => tcs.TrySetResult(next)), hasNewContent);
                     })
                     .ToList(),
                 _gameSettings.SkipAnimations);

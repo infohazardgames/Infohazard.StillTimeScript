@@ -12,7 +12,8 @@ namespace Infohazard.StillTimeScript.Game.View.Handlers {
             DelayNode node,
             CancellationToken cancellationToken) {
 
-            await UniTask.Delay(TimeSpan.FromSeconds(node.Time), cancellationToken: cancellationToken);
+            float time = (float) node.Time.Evaluate(state).NumberValue;
+            await UniTask.Delay(TimeSpan.FromSeconds(time), cancellationToken: cancellationToken);
             return node.Next;
         }
     }

@@ -1,11 +1,11 @@
-﻿using Infohazard.StillTimeScript.Core.Utility;
+﻿using Infohazard.StillTimeScript.Core.Expressions;
 
 namespace Infohazard.StillTimeScript.Core.Resource {
     public class Speaker : Resource {
-        public StsColor Color { get; }
-        public string Text { get; }
+        public IExpression Color { get; }
+        public IExpression Text { get; }
 
-        public Speaker(string identifier, StsColor color, string text) : base(identifier) {
+        public Speaker(string identifier, IExpression color, IExpression text) : base(identifier) {
             Color = color;
             Text = text;
         }

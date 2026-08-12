@@ -9,7 +9,7 @@ namespace Infohazard.StillTimeScript.Game.StateProcessors {
             foreach (Interrupt interrupt in graph.ResourcesByIdentifier.Values.OfType<Interrupt>()) {
                 if (!interrupt.Condition.Evaluate(state).ToBool()) continue;
 
-                nextNode = interrupt.TargetNode;
+                nextNode = interrupt.Target.Evaluate(state).NodeValue;
                 return;
             }
         }

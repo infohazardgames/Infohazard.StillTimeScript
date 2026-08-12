@@ -3,16 +3,12 @@ using Infohazard.StillTimeScript.Core.Nodes;
 using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Commands {
+    [AutoCommandParser("pop")]
     public class PopCommand : Command, ISequentialCommand {
-        public bool IsTryPop { get; }
-
-        public PopCommand(int lineNumber, string line, bool isTryPop) : base(lineNumber, line) {
-            IsTryPop = isTryPop;
-        }
+        public PopCommand(LineTokens tokens) : base(tokens) { }
 
         public void ApplyToSequence(NodeSequenceBuilder builder, GraphData graphData) {
-            PopNode node = new(IsTryPop);
-            builder.Append(node);
+            builder.Append(new PopNode());
         }
     }
 }

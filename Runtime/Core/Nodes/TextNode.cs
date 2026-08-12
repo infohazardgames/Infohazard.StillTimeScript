@@ -1,12 +1,13 @@
-﻿using Infohazard.StillTimeScript.Core.Resource;
+﻿using Infohazard.StillTimeScript.Core.Expressions;
+using Infohazard.StillTimeScript.Core.Resource;
 
 namespace Infohazard.StillTimeScript.Core.Nodes {
     public abstract class TextNode : Node {
-        public string Text { get; }
+        public IExpression TextExpression { get; }
         public Speaker Speaker { get; }
 
-        public TextNode(string text, Speaker speaker) {
-            Text = text;
+        public TextNode(IExpression textExpression, Speaker speaker) {
+            TextExpression = textExpression;
             Speaker = speaker;
         }
 

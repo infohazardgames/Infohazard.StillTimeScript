@@ -1,28 +1,21 @@
-﻿using System.Collections.Generic;
-using Infohazard.StillTimeScript.Core.Commands.Interfaces;
+﻿using Infohazard.StillTimeScript.Core.Commands.Interfaces;
+using Infohazard.StillTimeScript.Core.Expressions;
 using Infohazard.StillTimeScript.Core.Nodes;
+using Infohazard.StillTimeScript.Core.Parsers;
 using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Commands {
+    [AutoCommandParser("delay", 1)]
     public class DelayCommand : Command, ISequentialCommand {
-        public float Time { get; }
+        public string TimeStr { get; }
 
-        public DelayCommand(int lineNumber, string line, float time) : base(lineNumber, line) {
-            Time = time;
-        }
-
-        public void ApplyToSequence(ref ISequentialNode nextNode,
-                                    Dictionary<string, Resource.Resource> resourceDictionary,
-                                    Dictionary<string, INode> nodeDictionary,
-                                    List<INode> createdNodes) {
-            DelayNode node = new(Time);
-            createdNodes.Add(node);
-            nextNode.Next = node;
-            nextNode = node;
+        public DelayCommand(LineTokens tokens) : base(tokens) {
+            TimeStr = tokens.GetArg(0);
         }
 
         public void ApplyToSequence(NodeSequenceBuilder builder, GraphData graphData) {
-            builder.Append(new DelayNode(Time));
+            IExpression timeExpr = ExpressionParser.ParseExpression(this, graphData, TimeStr, StsValueType.Number);
+            builder.Append(new DelayNode(timeExpr));
         }
     }
 }

@@ -1,22 +1,27 @@
 ﻿using Infohazard.StillTimeScript.Core.Commands.Interfaces;
+using Infohazard.StillTimeScript.Core.Expressions;
+using Infohazard.StillTimeScript.Core.Parsers;
 using Infohazard.StillTimeScript.Core.Resource;
 using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Commands {
+    [AutoCommandParser("speaker", 1, 2, true)]
     public class SpeakerCommand : Command, IResourceCommand {
         public string Name { get; }
-        public StsColor Color { get; }
-        public string Text { get; }
+        public string ColorStr { get; }
+        public string TextExprStr { get; }
 
-        public SpeakerCommand(int lineNumber, string line, string name, StsColor color, string text) :
-            base(lineNumber, line) {
-            Name = name;
-            Color = color;
-            Text = text;
+        public SpeakerCommand(LineTokens tokens) : base(tokens) {
+            Name = tokens.GetArg(0);
+            ColorStr = tokens.GetArg(1);
+            TextExprStr = tokens.Text;
         }
 
         public void CreateResources(GraphData graphData) {
-            Speaker speaker = new(Name, Color, Text);
+            IExpression colorExpr = ExpressionParser.ParseExpression(this, graphData, ColorStr, StsValueType.Color);
+            IExpression textExpr = ExpressionParser.ParseStringExpression(this, graphData, TextExprStr);
+
+            Speaker speaker = new(Name, colorExpr, textExpr);
             graphData.Resources.Add(Name, speaker);
         }
     }

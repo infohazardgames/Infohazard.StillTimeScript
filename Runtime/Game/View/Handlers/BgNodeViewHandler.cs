@@ -4,6 +4,7 @@ using Infohazard.StillTimeScript.Core.Commands;
 using Infohazard.StillTimeScript.Core.Nodes;
 using Infohazard.StillTimeScript.Core.Resource;
 using Infohazard.StillTimeScript.Core.State;
+using Infohazard.StillTimeScript.Core.Utility;
 using Infohazard.StillTimeScript.Game.Utility;
 using Infohazard.StillTimeScript.Game.View.Components;
 
@@ -17,8 +18,10 @@ namespace Infohazard.StillTimeScript.Game.View.Handlers {
             StateContainer state,
             BgNode node,
             CancellationToken cancellationToken) {
+            StsColor color = node.Color.Evaluate(state).ColorValue;
+            float time = (float) node.Time.Evaluate(state).NumberValue;
 
-            _view.SetColor(node.Color, _gameSettings.SkipAnimations ? 0 : node.Time);
+            _view.SetColor(color, _gameSettings.SkipAnimations ? 0 : time);
             return UniTask.FromResult(node.Next);
         }
 

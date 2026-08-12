@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using Infohazard.Core;
 using Infohazard.StillTimeScript.Core.Resource;
+using Infohazard.StillTimeScript.Core.State;
+using Infohazard.StillTimeScript.Core.Utility;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -65,23 +67,29 @@ namespace Infohazard.StillTimeScript.Game.View.Components {
             }
         }
 
-        private string AddSpeakerToText(string text, Speaker speaker) {
+        private string AddSpeakerToText(string text, Speaker speaker, StateContainer state) {
             if (speaker == null) return text;
 
-            string color = speaker.Color.ToHexString();
-            return $"<color=#{color}>{speaker.Text}</color>\n{text}";
+            string speakerText = speaker.Text.Evaluate(state).StringValue;
+            if (speaker.Color != null) {
+                StsColor color = speaker.Color.Evaluate(state).ColorValue;
+                speakerText = $"<color=#{color.ToHexString()}>{speakerText}</color>\n{text}";
+            }
+
+            return speakerText;
         }
 
         public void SetSingleText(
             string text,
             Speaker speaker,
+            StateContainer state,
             Action next,
             bool skipAnimation,
             bool autoAdvance) {
 
             Clear();
 
-            SetText(AddSpeakerToText(text, speaker));
+            SetText(AddSpeakerToText(text, speaker, state));
             _mainButtonAction = next;
 
             if (skipAnimation) {
@@ -95,12 +103,13 @@ namespace Infohazard.StillTimeScript.Game.View.Components {
         public void SetChoices(
             string mainText,
             Speaker speaker,
+            StateContainer state,
             List<(string text, Action action, bool hasNew)> choices,
             bool skipAnimation) {
 
             Clear();
 
-            SetText(AddSpeakerToText(mainText, speaker));
+            SetText(AddSpeakerToText(mainText, speaker, state));
             foreach ((string text, Action action, bool hasNew) in choices) {
                 ChoiceView choiceView = Instantiate(_choiceViewPrefab, _choiceViewParent, false);
                 choiceView.Configure(text, action, hasNew);

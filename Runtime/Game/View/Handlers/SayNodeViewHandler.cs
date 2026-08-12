@@ -37,9 +37,11 @@ namespace Infohazard.StillTimeScript.Game.View.Handlers {
 
             cancellationToken.Register(cancel);
 
+            string sayText = node.TextExpression.Evaluate(state).StringValue;
             _view.SetSingleText(
-                GameUtility.DoStringInterpolation(node.Text, graph, state),
+                sayText,
                 node.Speaker,
+                state,
                 advance,
                 _gameSettings.SkipAnimations,
                 skipDialog);

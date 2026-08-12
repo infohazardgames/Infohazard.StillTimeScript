@@ -5,13 +5,14 @@ using Infohazard.StillTimeScript.Core.Nodes;
 using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Commands {
+    [AutoCommandParser("label", 1)]
     public class LabelCommand : Command, IResourceCommand, ISubtreeCommand {
         public string Identifier { get; }
 
         public List<ISequentialCommand> Commands { get; } = new();
 
-        public LabelCommand(int lineNumber, string line, string identifier) : base(lineNumber, line) {
-            Identifier = identifier;
+        public LabelCommand(LineTokens tokens) : base(tokens) {
+            Identifier = tokens.GetArg(0);
         }
 
         public override void GatherSubCommands(ref CommandGatheringState state) {

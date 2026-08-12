@@ -3,20 +3,20 @@ using Infohazard.StillTimeScript.Core.State;
 
 namespace Infohazard.StillTimeScript.Core.Nodes {
     public class Choice : IBranchOption {
-        public string Text { get; }
+        public IExpression TextExpression { get; }
 
-        public INode Next { get; }
+        public IExpression Next { get; }
 
         public IExpression Condition { get; }
 
-        public Choice(string text, INode next, IExpression condition = null) {
-            Text = text;
+        public Choice(IExpression textExpression, IExpression next, IExpression condition = null) {
+            TextExpression = textExpression;
             Next = next;
             Condition = condition;
         }
 
         public virtual string GetText(StateContainer state) {
-            return Text;
+            return TextExpression.Evaluate(state).StringValue;
         }
 
         public virtual bool IsAvailable(StateContainer state) {
@@ -25,7 +25,7 @@ namespace Infohazard.StillTimeScript.Core.Nodes {
         }
 
         public virtual INode GetNextNode(StateContainer state) {
-            return Next;
+            return Next.Evaluate(state).NodeValue;
         }
     }
 }

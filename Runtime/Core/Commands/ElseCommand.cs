@@ -6,7 +6,7 @@ namespace Infohazard.StillTimeScript.Core.Commands {
     public class ElseCommand : Command {
         public List<ISequentialCommand> Commands { get; } = new();
 
-        public ElseCommand(int lineNumber, string line) : base(lineNumber, line) { }
+        public ElseCommand(LineTokens tokens) : base(tokens) { }
 
         public override void GatherSubCommands(ref CommandGatheringState state) {
             CommandUtility.GatherSubCommands(this, ref state, Commands);

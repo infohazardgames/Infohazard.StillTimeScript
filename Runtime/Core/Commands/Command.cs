@@ -6,6 +6,11 @@ namespace Infohazard.StillTimeScript.Core.Commands {
         public int LineNumber { get; }
         public string Line { get; }
 
+        public Command(LineTokens tokens) {
+            LineNumber = tokens.LineNumber;
+            Line = tokens.OriginalLine;
+        }
+
         public Command(int lineNumber, string line) {
             LineNumber = lineNumber;
             Line = line;

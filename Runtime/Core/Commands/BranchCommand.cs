@@ -5,11 +5,11 @@ using Infohazard.StillTimeScript.Core.Resource;
 using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Commands {
+    [AutoCommandParser("branch", 0, 1, true)]
     public class BranchCommand : TextCommand, ISequentialCommand {
         public List<IBranchSubCommand> SubCommands { get; } = new();
 
-        public BranchCommand(int lineNumber, string line, string speaker, string text) :
-            base(lineNumber, line, speaker, text) { }
+        public BranchCommand(LineTokens tokens) : base(tokens, tokens.GetArg(0), tokens.Text) { }
 
         public override void GatherSubCommands(ref CommandGatheringState state) {
             CommandUtility.GatherSubCommands(this, ref state, SubCommands);
@@ -17,7 +17,7 @@ namespace Infohazard.StillTimeScript.Core.Commands {
 
         public void ApplyToSequence(NodeSequenceBuilder builder, GraphData graphData) {
             Speaker speaker = GetSpeaker(graphData);
-            BranchNode branchNode = new(Text, speaker);
+            BranchNode branchNode = new(GetTextExpression(graphData), speaker);
 
             foreach (IBranchSubCommand subCommand in SubCommands) {
                 subCommand.CreateBranchOptions(graphData, branchNode.Options);

@@ -9,7 +9,7 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
         public void ParseCommand(ParsingState state, List<ICommand> commands) {
             LineTokens tokens = Tokenizer.TokenizeAndAdvance(state);
             Tokenizer.ValidateTokens(tokens, 0, 0, false, true);
-            ElseCommand command = new(tokens.LineNumber, tokens.OriginalLine);
+            ElseCommand command = new(tokens);
             commands.Add(command);
 
             if (!string.IsNullOrEmpty(tokens.Text)) {

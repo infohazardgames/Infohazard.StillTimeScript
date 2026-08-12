@@ -6,21 +6,16 @@ using Infohazard.StillTimeScript.Core.Resource;
 using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Commands {
+    [AutoCommandParser("interrupt", 3, 3)]
     public class InterruptCommand : Command, IResourceCommand {
         public string InterruptId { get; }
-        public string TargetLabel { get; }
-        public string Condition { get; }
+        public string TargetStr { get; }
+        public string ConditionStr { get; }
 
-        public InterruptCommand(
-            int lineNumber,
-            string line,
-            string interruptId,
-            string targetLabel,
-            string condition) :
-            base(lineNumber, line) {
-            InterruptId = interruptId;
-            TargetLabel = targetLabel;
-            Condition = condition;
+        public InterruptCommand(LineTokens tokens) : base(tokens) {
+            InterruptId = tokens.GetArg(0);
+            TargetStr = tokens.GetArg(1);
+            ConditionStr = tokens.GetArg(2);
         }
 
         public void CreateResources(GraphData graphData) {
@@ -30,10 +25,10 @@ namespace Infohazard.StillTimeScript.Core.Commands {
         public void ValidateResources(GraphData graphData) {
             Interrupt interrupt = graphData.GetResource<Interrupt>(this, InterruptId);
 
-            IExpression condition = ExpressionParser.ParseExpression(this, graphData, Condition);
-            INode target = graphData.GetNode(this, TargetLabel);
+            IExpression condition = ExpressionParser.ParseExpression(this, graphData, ConditionStr);
+            IExpression target = ExpressionParser.ParseExpression(this, graphData, TargetStr, StsValueType.Node);
             interrupt.Condition = condition;
-            interrupt.TargetNode = target;
+            interrupt.Target = target;
         }
     }
 }

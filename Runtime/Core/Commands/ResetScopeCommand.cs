@@ -4,11 +4,12 @@ using Infohazard.StillTimeScript.Core.Resource;
 using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Commands {
+    [AutoCommandParser("reset", 1)]
     public class ResetScopeCommand : Command, ISequentialCommand {
         public string Scope { get; }
 
-        public ResetScopeCommand(int lineNumber, string line, string scope) : base(lineNumber, line) {
-            Scope = scope;
+        public ResetScopeCommand(LineTokens tokens) : base(tokens) {
+            Scope = tokens.GetArg(0);
         }
 
         public void ApplyToSequence(NodeSequenceBuilder builder, GraphData graphData) {

@@ -18,5 +18,9 @@
             Arguments = arguments;
             Text = text;
         }
+
+        public string GetArg(int index) {
+            return Arguments != null && Arguments.Length > index ? Arguments[index] : null;
+        }
     }
 }
