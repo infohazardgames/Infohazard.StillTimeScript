@@ -29,7 +29,8 @@ namespace Infohazard.StillTimeScript.Game.Runner {
 
             StateContainer previousState = stack[^1];
 
-            INode currentNode = state.GetOrCreate<CurrentNodeComponent>().CurrentNode;
+            CurrentNodeComponent currentNodeComponent = state.GetOrCreate<CurrentNodeComponent>();
+            INode currentNode = currentNodeComponent.CurrentNode;
             if (!previousState.GetOrCreate<VisitedNodesComponent>().IsVisited(scope, currentNode)) {
                 return true;
             }
@@ -44,7 +45,11 @@ namespace Infohazard.StillTimeScript.Game.Runner {
                 VariablesComponent stateVariables = state.GetOrCreate<VariablesComponent>();
 
                 foreach (INode possibleNext in currentNode.GetPossibleNextNodes(state)) {
-                    if (possibleNext is null or ResetScopeNode) continue;
+                    if (possibleNext is ResetScopeNode) continue;
+
+                    if (!_stateAdvancer.TryAdvanceState(graph, state, possibleNext, out StateContainer nextState)) {
+                        continue;
+                    }
 
                     StateContainer previousStateAtNode =
                         stack.FindLast(s => s.GetOrCreate<CurrentNodeComponent>().CurrentNode == possibleNext);
@@ -54,8 +59,6 @@ namespace Infohazard.StillTimeScript.Game.Runner {
                     if (previousVariables != null && VariablesAreEqual(stateVariables, previousVariables)) {
                         continue;
                     }
-
-                    StateContainer nextState = _stateAdvancer.AdvanceState(graph, state, possibleNext);
 
                     if (ExploreBranchForNewContent(graph, stack, nextState, maxDepth)) return true;
                 }

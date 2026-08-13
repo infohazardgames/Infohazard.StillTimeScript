@@ -135,11 +135,11 @@ namespace Infohazard.StillTimeScript.Core.Utility {
         }
 
         public static List<string> TokenizeArgumentList(
-            int lineNumber, 
-            string line, 
+            int lineNumber,
+            string line,
             ReadOnlySpan<char> span,
             ref int index) {
-            
+
             SkipWhitespace(span, ref index);
             EnsureNotAtEnd(lineNumber, line, span, index);
             if (span[index++] != '(') {
@@ -156,7 +156,7 @@ namespace Infohazard.StillTimeScript.Core.Utility {
                 SkipWhitespace(span, ref index);
                 EnsureNotAtEnd(lineNumber, line, span, index);
                 if (span[index] != ',') continue;
-                
+
                 index++;
                 SkipWhitespace(span, ref index);
             }
@@ -172,7 +172,9 @@ namespace Infohazard.StillTimeScript.Core.Utility {
             EnsureNotAtEnd(lineNumber, line, span, index);
             for (end = index; end < span.Length; end++) {
                 char c = span[end];
-                if (c == '(') {
+                if (c == '"') {
+                    end = GetEndOfStringLiteral(lineNumber, line, span, end) - 1;
+                } else if (c == '(') {
                     openCount++;
                 } else if (c == ')') {
                     if (openCount > 0) {
@@ -189,7 +191,7 @@ namespace Infohazard.StillTimeScript.Core.Utility {
             index = end;
             return result;
         }
-        
+
         public static void SkipWhitespace(ReadOnlySpan<char> span, ref int index) {
             while (index < span.Length && char.IsWhiteSpace(span[index])) {
                 index++;
@@ -202,6 +204,23 @@ namespace Infohazard.StillTimeScript.Core.Utility {
             }
 
             return true;
+        }
+
+        public static int GetEndOfStringLiteral(int lineNumber, string line, ReadOnlySpan<char> span, int index) {
+            bool isEscape = false;
+            for (int i = index + 1; i < span.Length; i++) {
+                char c = span[i];
+
+                if (isEscape) {
+                    isEscape = false;
+                } else if (c == '\\') {
+                    isEscape = true;
+                } else if (c == '"') {
+                    return i + 1;
+                }
+            }
+
+            throw new ParsingException(lineNumber, line, "Encountered non-closed string literal.");
         }
     }
 }

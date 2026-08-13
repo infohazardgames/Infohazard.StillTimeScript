@@ -2,12 +2,9 @@
 
 namespace Infohazard.StillTimeScript.Core.Resource {
     public class Speaker : Resource {
-        public IExpression Color { get; }
-        public IExpression Text { get; }
+        public IExpression Color { get; set; }
+        public IExpression Text { get; set; }
 
-        public Speaker(string identifier, IExpression color, IExpression text) : base(identifier) {
-            Color = color;
-            Text = text;
-        }
+        public Speaker(string identifier) : base(identifier) { }
     }
 }

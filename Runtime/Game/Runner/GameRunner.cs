@@ -32,6 +32,9 @@ namespace Infohazard.StillTimeScript.Game.Runner {
 
             StateContainer state = _gameGraph.BuildEmptyState();
             state.GetOrCreate<CurrentNodeComponent>().CurrentNode = _gameGraph.RootNode;
+            state.GetOrCreate<VisitedNodesComponent>().VisitNode(_gameGraph.RootNode, true);
+            _gameGraph.RootNode.ApplyAfterAdvanceToSelf(_gameGraph, state);
+
             _cancellationTokenSource = new CancellationTokenSource();
             Run(state, _cancellationTokenSource.Token).Forget();
         }
@@ -114,9 +117,12 @@ namespace Infohazard.StillTimeScript.Game.Runner {
                     return;
                 }
 
-                _currentState = _stateAdvancer.AdvanceState(_gameGraph, _currentState, nextNode);
-                Debug.Log(
-                    $"Going to next state '{_currentState.GetOrCreate<CurrentNodeComponent>().CurrentNode?.FullIdentifier}'");
+                if (!_stateAdvancer.TryAdvanceState(_gameGraph, _currentState, nextNode, out _currentState)) {
+                    break;
+                }
+
+                string nextStateId = _currentState.GetOrCreate<CurrentNodeComponent>().CurrentNode?.FullIdentifier;
+                Debug.Log($"Going to next state '{nextStateId}'");
             }
 
             _gameViewRoot.Clear();

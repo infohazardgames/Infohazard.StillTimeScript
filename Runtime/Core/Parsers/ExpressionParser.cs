@@ -77,27 +77,6 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             BinaryOperatorParsingPriority.Sort((a, b) => b.Length - a.Length);
         }
 
-        public static IExpression ParseStringLiteral(Command command, GraphData graphData, ReadOnlySpan<char> span,
-                                                     int index, out int endIndex) {
-
-            bool isEscape = false;
-            for (int i = index; i < span.Length; i++) {
-                char c = span[i];
-
-                if (isEscape) {
-                    isEscape = false;
-                } else if (c == '\\') {
-                    isEscape = true;
-                } else if (c == '"') {
-                    endIndex = i + 1;
-                    string str = span[index..i].ToString();
-                    return ParseStringExpression(command, graphData, str);
-                }
-            }
-
-            throw new ParsingException(command.LineNumber, command.Line, "Encountered non-closed string literal.");
-        }
-
         public static IExpression ParseStringExpression(Command command, GraphData graphData, string stringExpr) {
             StringConcatExpression expression = new();
 
@@ -305,8 +284,9 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             }
 
             if (c == '"') {
-                index++;
-                return ParseStringLiteral(command, graphData, span, index, out endIndex);
+                endIndex = Tokenizer.GetEndOfStringLiteral(command.LineNumber, command.Line, span, index);
+                string stringContent = span[(index + 1)..(endIndex - 1)].ToString();
+                return ParseStringExpression(command, graphData, stringContent);
             }
 
             foreach (string funcOp in FunctionOperators) {

@@ -38,8 +38,9 @@ namespace Infohazard.StillTimeScript.Game.View.Handlers {
                         INode next = o.GetNextNode(state);
                         string choiceText = o.GetText(state);
                         List<StateContainer> stack = new() { state };
-                        StateContainer testState = _stateAdvancer.AdvanceState(graph, state, next);
-                        bool hasNewContent = _stateExplorer.ExploreBranchForNewContent(graph, stack, testState, 10_000);
+                        bool hasNewContent =
+                            _stateAdvancer.TryAdvanceState(graph, state, next, out StateContainer testState) &&
+                            _stateExplorer.ExploreBranchForNewContent(graph, stack, testState, 10_000);
                         return (text: choiceText, new Action(() => tcs.TrySetResult(next)), hasNewContent);
                     })
                     .ToList(),

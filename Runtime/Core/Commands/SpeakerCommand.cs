@@ -18,11 +18,17 @@ namespace Infohazard.StillTimeScript.Core.Commands {
         }
 
         public void CreateResources(GraphData graphData) {
+            Speaker speaker = new(Name);
+            graphData.Resources.Add(Name, speaker);
+        }
+
+        public void ValidateResources(GraphData graphData) {
             IExpression colorExpr = ExpressionParser.ParseExpression(this, graphData, ColorStr, StsValueType.Color);
             IExpression textExpr = ExpressionParser.ParseStringExpression(this, graphData, TextExprStr);
 
-            Speaker speaker = new(Name, colorExpr, textExpr);
-            graphData.Resources.Add(Name, speaker);
+            Speaker speaker = graphData.GetResource<Speaker>(this, Name);
+            speaker.Color = colorExpr;
+            speaker.Text = textExpr;
         }
     }
 }

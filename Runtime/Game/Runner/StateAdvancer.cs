@@ -8,14 +8,26 @@ namespace Infohazard.StillTimeScript.Game.Runner {
     public class StateAdvancer : MonoBehaviour {
         public List<StateProcessor> _stateProcessors;
 
-        public StateContainer AdvanceState(GameGraph graph, StateContainer currentState, INode nextNode) {
+        public bool TryAdvanceState(GameGraph graph, StateContainer currentState, INode nextNode,
+                                    out StateContainer nextState) {
             StateContainer newState = currentState.Clone();
+
+            CurrentNodeComponent currentComponent = newState.GetOrCreate<CurrentNodeComponent>();
+
+            if (nextNode == null) {
+                if (currentComponent.NodeStack.Count > 0) {
+                    nextNode = currentComponent.NodeStack[^1];
+                    currentComponent.NodeStack.RemoveAt(currentComponent.NodeStack.Count - 1);
+                } else {
+                    nextState = null;
+                    return false;
+                }
+            }
 
             foreach (StateProcessor stateProcessor in _stateProcessors) {
                 stateProcessor.ProcessBeforeAdvance(graph, newState, ref nextNode);
             }
 
-            CurrentNodeComponent currentComponent = newState.GetOrCreate<CurrentNodeComponent>();
             VisitedNodesComponent visitedComponent = newState.GetOrCreate<VisitedNodesComponent>();
 
             currentComponent.CurrentNode.ApplyBeforeAdvanceFromSelf(graph, newState, ref nextNode);
@@ -30,7 +42,8 @@ namespace Infohazard.StillTimeScript.Game.Runner {
                 }
             }
 
-            return newState;
+            nextState = newState;
+            return true;
         }
     }
 }
