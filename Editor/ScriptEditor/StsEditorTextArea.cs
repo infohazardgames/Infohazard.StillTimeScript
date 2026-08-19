@@ -1,4 +1,9 @@
-﻿using System.Collections.Generic;
+﻿#nullable enable
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Infohazard.StillTimeScript.Core.Utility;
 using Infohazard.StillTimeScript.ViewModel;
 using UnityEditor;
 using UnityEngine;
@@ -16,74 +21,29 @@ namespace StillTime.Editor.ScriptEditor {
         private float _charWidth;
         private readonly IMGUIContainer _imguiContainer;
         private readonly Scroller _verticalScroller;
+        private readonly List<string?> _formattedLines = new();
 
-        [UxmlAttribute] public GUISkin GuiSkin { get; set; }
-
-        [UxmlAttribute] public string[] PlaceholderLines { get; set; }
-
-        public StsDocumentViewModel ViewModel {
-            get => _viewModel;
-            set {
-                if (_viewModel == value) return;
-
-                if (_viewModel != null) {
-                    _viewModel.AnnotationsChanged -= OnAnnotationsChanged;
-                }
-
-                _viewModel = value;
-
-                if (_viewModel != null) {
-                    _viewModel.AnnotationsChanged += OnAnnotationsChanged;
-                }
-            }
-        }
-
-        private float _currentScrollValue;
-        private bool _selectionActive;
-        private bool _cursorActive;
         private bool _cursorBlinkState;
-        private Vector2Int _cursorPosition;
-        private Vector2Int _selectionStart;
-        private Vector2Int _selectionEnd;
         private float _minBlinkTime;
-        private int _rememberedCursorX;
-        private StsDocumentViewModel _viewModel;
+        private string[] _placeholderLines = Array.Empty<string>();
 
-        private IReadOnlyList<string> Lines => ViewModel?.ScriptLines ?? PlaceholderLines;
-        private IReadOnlyList<string> DisplayLines => ViewModel?.DisplayLines ?? PlaceholderLines;
+        [UxmlAttribute] public GUISkin GuiSkin { get; set; } = null!;
 
-        private bool SelectionReverse => _selectionStart.y == _selectionEnd.y
-            ? _selectionStart.x > _selectionEnd.x
-            : _selectionStart.y > _selectionEnd.y;
-
-        private Vector2Int SelectionMin => SelectionReverse ? _selectionEnd : _selectionStart;
-        private Vector2Int SelectionMax => SelectionReverse ? _selectionStart : _selectionEnd;
-
-        private Vector2 ViewOffset => new(0, _currentScrollValue * LineHeight);
-
-        public Vector2Int CursorPosition {
-            get => _cursorPosition;
-            private set {
-                if (_cursorPosition == value) return;
-                _rememberedCursorX = value.x;
-                _cursorPosition.y = Mathf.Clamp(value.y, 0, Lines.Count - 1);
-                _cursorPosition.x = Mathf.Clamp(value.x, 0, Lines[_cursorPosition.y].Length);
-                _minBlinkTime = Time.realtimeSinceStartup + BlinkCooldown;
-                _cursorBlinkState = true;
-                _cursorActive = true;
-                _imguiContainer.MarkDirtyRepaint();
+        [UxmlAttribute]
+        public string[] PlaceholderLines {
+            get => _placeholderLines;
+            set {
+                _placeholderLines = value;
+                ViewModel.Rebuild(_placeholderLines);
             }
         }
 
-        public int CursorX {
-            get => _cursorPosition.x;
-            set => CursorPosition = new Vector2Int(value, _cursorPosition.y);
-        }
+        public StsDocumentViewModel ViewModel { get; }
 
-        public int CursorY {
-            get => _cursorPosition.y;
-            set => CursorPosition = new Vector2Int(_rememberedCursorX, value);
-        }
+        private Vector2 ViewOffset => new(0, ViewModel.ScrollValue * LineHeight);
+
+        private IReadOnlyList<string> Lines => ViewModel.ScriptLines;
+
 
         public StsEditorTextArea() {
             _imguiContainer = new IMGUIContainer(OnGui) {
@@ -111,6 +71,14 @@ namespace StillTime.Editor.ScriptEditor {
             _verticalScroller.valueChanged += OnScrollValueChanged;
             RegisterCallback<KeyDownEvent>(OnKeyDown);
             RegisterCallback<GeometryChangedEvent>(OnGeometryChanged);
+
+            ViewModel = new StsDocumentViewModel(Enumerable.Empty<string>());
+            ViewModel.LinesInserted += OnViewModelLinesInserted;
+            ViewModel.LinesModified += OnViewModelLinesModified;
+            ViewModel.LinesRemoved += OnViewModelLinesRemoved;
+            ViewModel.CursorChanged += OnViewModelCursorChanged;
+            ViewModel.SelectionChanged += OnViewModelSelectionChanged;
+            ViewModel.ScrollChanged += OnViewModelScrollChanged;
         }
 
         #region Event Handlers
@@ -128,7 +96,7 @@ namespace StillTime.Editor.ScriptEditor {
         }
 
         private void Update() {
-            if (!_cursorActive) return;
+            if (!ViewModel.CursorActive) return;
 
             float time = Time.realtimeSinceStartup;
             bool blink = time < _minBlinkTime || time % 1 > 0.5f;
@@ -138,27 +106,21 @@ namespace StillTime.Editor.ScriptEditor {
             _imguiContainer.MarkDirtyRepaint();
         }
 
-        private void OnAnnotationsChanged() {
-            _imguiContainer.MarkDirtyRepaint();
-        }
-
         private void OnMouseDown(MouseDownEvent evt) {
             if (evt.button == 0) {
-                CursorPosition = GetCursorPosition(evt.localMousePosition);
-                _selectionStart = CursorPosition;
-                _selectionEnd = CursorPosition;
-                _selectionActive = true;
-                _cursorActive = true;
+                ViewModel.CursorPosition = GetCursorPosition(evt.localMousePosition);
+                ViewModel.SetSelectionRange(ViewModel.CursorPosition, ViewModel.CursorPosition);
             }
         }
 
         private void OnMouseUp(MouseUpEvent evt) {
             if (evt.button == 0) {
-                CursorPosition = GetCursorPosition(evt.localMousePosition);
+                ViewModel.CursorPosition = GetCursorPosition(evt.localMousePosition);
 
-                _selectionActive = CursorPosition != _selectionStart;
-                if (_selectionActive) {
-                    _selectionEnd = CursorPosition;
+                if (ViewModel.CursorPosition == ViewModel.SelectionStart) {
+                    ViewModel.ClearSelection();
+                } else {
+                    ViewModel.SelectionEnd = ViewModel.CursorPosition;
                 }
             }
         }
@@ -174,10 +136,8 @@ namespace StillTime.Editor.ScriptEditor {
             _imguiContainer.EnableInClassList(TextAreaCursorClassName, isTextCursor);
 
             if ((evt.pressedButtons & 1) != 0) {
-                CursorPosition = GetCursorPosition(evt.localMousePosition);
-                if (_selectionActive) {
-                    _selectionEnd = CursorPosition;
-                }
+                ViewModel.CursorPosition = GetCursorPosition(evt.localMousePosition);
+                ViewModel.SelectionEnd = ViewModel.CursorPosition;
             }
         }
 
@@ -187,83 +147,82 @@ namespace StillTime.Editor.ScriptEditor {
 
 
         private void OnScrollValueChanged(float value) {
-            _currentScrollValue = value;
+            ViewModel.ScrollValue = value;
             _imguiContainer.MarkDirtyRepaint();
         }
 
         private void OnKeyDown(KeyDownEvent evt) {
             if (evt.keyCode == KeyCode.Backspace) {
-                if (_selectionActive) {
+                if (ViewModel.SelectionActive) {
                     DeleteSelection();
                 } else {
                     DeleteCharBeforeCursor();
                 }
             } else if (evt.keyCode == KeyCode.Delete) {
-                if (_selectionActive) {
+                if (ViewModel.SelectionActive) {
                     DeleteSelection();
                 } else {
                     DeleteCharAfterCursor();
                 }
             } else if (evt.keyCode == KeyCode.Return) {
-                if (_selectionActive) {
+                if (ViewModel.SelectionActive) {
                     DeleteSelection();
                 }
 
                 InsertNewLine();
             } else if (evt.keyCode == KeyCode.Tab) {
                 if (!evt.shiftKey) {
-                    if (_selectionActive) {
+                    if (ViewModel.SelectionActive) {
                         InsertTextBeforeSelectedLines(Indent);
                     } else {
                         InsertText(Indent);
                     }
                 } else {
-                    if (_selectionActive) {
+                    if (ViewModel.SelectionActive) {
                         RemoveTextBeforeSelectedLines(Indent);
                     } else {
                         RemoveTextBeforeCursor(Indent);
                     }
                 }
             } else if (evt.keyCode == KeyCode.LeftArrow) {
-                if (CursorX > 0) {
-                    CursorX--;
-                } else if (CursorY > 0) {
-                    CursorPosition = new Vector2Int(Lines[CursorY - 1].Length, CursorY - 1);
+                if (ViewModel.CursorX > 0) {
+                    ViewModel.CursorX--;
+                } else if (ViewModel.CursorY > 0) {
+                    ViewModel.CursorPosition = new Vector2Int(Lines[ViewModel.CursorY - 1].Length, ViewModel.CursorY - 1);
                 }
             } else if (evt.keyCode == KeyCode.RightArrow) {
-                if (CursorX < Lines[CursorY].Length) {
-                    CursorX++;
-                } else if (CursorY < Lines.Count - 1) {
-                    CursorPosition = new Vector2Int(0, CursorY + 1);
+                if (ViewModel.CursorX < Lines[ViewModel.CursorY].Length) {
+                    ViewModel.CursorX++;
+                } else if (ViewModel.CursorY < Lines.Count - 1) {
+                    ViewModel.CursorPosition = new Vector2Int(0, ViewModel.CursorY + 1);
                 }
             } else if (evt.keyCode == KeyCode.UpArrow) {
-                if (CursorY > 0) {
-                    CursorY--;
+                if (ViewModel.CursorY > 0) {
+                    ViewModel.CursorY--;
                 } else {
-                    CursorPosition = new Vector2Int(0, 0);
+                    ViewModel.CursorPosition = new Vector2Int(0, 0);
                 }
             } else if (evt.keyCode == KeyCode.DownArrow) {
-                if (CursorY < Lines.Count - 1) {
-                    CursorY++;
+                if (ViewModel.CursorY < Lines.Count - 1) {
+                    ViewModel.CursorY++;
                 } else {
-                    CursorPosition = new Vector2Int(Lines[^1].Length, Lines.Count - 1);
+                    ViewModel.CursorPosition = new Vector2Int(Lines[^1].Length, Lines.Count - 1);
                 }
             } else if (evt.keyCode == KeyCode.End) {
                 if (!evt.shiftKey) {
-                    CursorX = Lines[CursorY].Length;
+                    ViewModel.CursorX = Lines[ViewModel.CursorY].Length;
                 } else {
-                    CursorPosition = new Vector2Int(Lines[^1].Length, Lines.Count - 1);
+                    ViewModel.CursorPosition = new Vector2Int(Lines[^1].Length, Lines.Count - 1);
                 }
             } else if (evt.keyCode == KeyCode.Home) {
                 if (!evt.shiftKey) {
-                    CursorX = 0;
+                    ViewModel.CursorX = 0;
                 } else {
-                    CursorPosition = new Vector2Int(0, 0);
+                    ViewModel.CursorPosition = new Vector2Int(0, 0);
                 }
             } else if (evt.ctrlKey || evt.commandKey) {
                 if (evt.keyCode == KeyCode.A) {
-                    _selectionStart = new Vector2Int(0, 0);
-                    _selectionEnd = new Vector2Int(Lines[^1].Length, Lines.Count - 1);
+                    ViewModel.SetSelectionRange(Vector2Int.zero, ViewModel.EndPosition);
                 }
             } else if (evt.character is not ('\t' or '\0' or '\n')) {
                 InsertText(evt.character.ToString());
@@ -271,12 +230,12 @@ namespace StillTime.Editor.ScriptEditor {
 
             _minBlinkTime = Time.realtimeSinceStartup + BlinkCooldown;
             int visibleLineCount = Mathf.FloorToInt(_imguiContainer.contentRect.height / LineHeight);
-            int maxVisibleLine = Mathf.FloorToInt(_currentScrollValue + visibleLineCount);
+            int maxVisibleLine = Mathf.FloorToInt(ViewModel.ScrollValue + visibleLineCount);
 
-            if (CursorY < _currentScrollValue) {
-                _verticalScroller.value = CursorY;
-            } else if (CursorY > maxVisibleLine) {
-                _verticalScroller.value = CursorY - visibleLineCount + 1;
+            if (ViewModel.CursorY < ViewModel.ScrollValue) {
+                _verticalScroller.value = ViewModel.CursorY;
+            } else if (ViewModel.CursorY > maxVisibleLine) {
+                _verticalScroller.value = ViewModel.CursorY - visibleLineCount + 1;
             }
 
             _imguiContainer.MarkDirtyRepaint();
@@ -288,81 +247,116 @@ namespace StillTime.Editor.ScriptEditor {
 
         #endregion
 
+        #region ViewModel Events
+
+        private void OnViewModelLinesInserted(StsRange range) {
+            _formattedLines.InsertRange(range.Start, Enumerable.Repeat<string?>(null, range.Length));
+            _imguiContainer.MarkDirtyRepaint();
+        }
+
+        private void OnViewModelLinesRemoved(StsRange range) {
+            _formattedLines.RemoveRange(range.Start, range.Length);
+            _imguiContainer.MarkDirtyRepaint();
+        }
+
+        private void OnViewModelLinesModified(StsRange range) {
+            for (int i = range.Start; i < range.End; i++) {
+                _formattedLines[i] = null;
+            }
+
+            _imguiContainer.MarkDirtyRepaint();
+        }
+
+        private void OnViewModelCursorChanged(Vector2Int cursor) {
+            _minBlinkTime = Time.realtimeSinceStartup + BlinkCooldown;
+            _cursorBlinkState = true;
+            _imguiContainer.MarkDirtyRepaint();
+        }
+
+        private void OnViewModelSelectionChanged(Vector2Int start, Vector2Int end) {
+            _imguiContainer.MarkDirtyRepaint();
+        }
+
+        private void OnViewModelScrollChanged(float value) {
+            _verticalScroller.value = value;
+            _imguiContainer.MarkDirtyRepaint();
+        }
+
+        #endregion
+
         #region Modification Commands
 
         private void DeleteSelection() {
-            if (ViewModel == null) return;
-
-            Vector2Int min = SelectionMin;
-            Vector2Int max = SelectionMax;
+            Vector2Int min = ViewModel.SelectionMin;
+            Vector2Int max = ViewModel.SelectionMax;
 
             ViewModel.DeleteText(min, max);
-            CursorPosition = _selectionEnd = _selectionStart = min;
-            _selectionActive = false;
+            ViewModel.CursorPosition = min;
+            ViewModel.ClearSelection();
             _imguiContainer.MarkDirtyRepaint();
         }
 
         private void DeleteCharBeforeCursor() {
-            if (ViewModel == null) return;
-            Vector2Int deleteMin = CursorPosition;
-            Vector2Int deleteMax = CursorPosition;
+            Vector2Int deleteMin = ViewModel.CursorPosition;
+            Vector2Int deleteMax = ViewModel.CursorPosition;
 
-            if (CursorX > 0) {
+            if (deleteMin.x > 0) {
                 deleteMin.x--;
-            } else if (CursorY > 0) {
+            } else if (deleteMin.y > 0) {
                 deleteMin = new Vector2Int(Lines[deleteMin.y - 1].Length, deleteMin.y - 1);
             }
 
             ViewModel.DeleteText(deleteMin, deleteMax);
-            CursorPosition = _selectionEnd = _selectionStart = deleteMin;
+            ViewModel.CursorPosition = deleteMin;
+            ViewModel.ClearSelection();
             _imguiContainer.MarkDirtyRepaint();
         }
 
         private void DeleteCharAfterCursor() {
-            if (ViewModel == null) return;
-            Vector2Int deleteMin = CursorPosition;
-            Vector2Int deleteMax = CursorPosition;
+            Vector2Int deleteMin = ViewModel.CursorPosition;
+            Vector2Int deleteMax = ViewModel.CursorPosition;
 
-            if (CursorX < Lines[CursorY].Length) {
+            if (deleteMin.x < Lines[deleteMin.y].Length) {
                 deleteMax.x++;
-            } else if (CursorY > 0) {
+            } else if (deleteMin.y < Lines.Count) {
                 deleteMax = new Vector2Int(0, deleteMin.y + 1);
             }
 
             ViewModel.DeleteText(deleteMin, deleteMax);
-            CursorPosition = _selectionEnd = _selectionStart = deleteMin;
+            ViewModel.CursorPosition = deleteMin;
+            ViewModel.ClearSelection();
             _imguiContainer.MarkDirtyRepaint();
         }
 
         private void InsertNewLine() {
-            ViewModel.InsertNewLine(CursorPosition);
-            CursorPosition = new Vector2Int(0, CursorY + 1);
+            ViewModel.InsertNewLine(ViewModel.CursorPosition);
+            ViewModel.CursorPosition = new Vector2Int(0, ViewModel.CursorY + 1);
             _imguiContainer.MarkDirtyRepaint();
         }
 
         private void InsertText(string text) {
-            ViewModel.InsertText(CursorPosition, text);
-            CursorX += text.Length;
+            ViewModel.InsertText(ViewModel.CursorPosition, text);
+            ViewModel.CursorX += text.Length;
             _imguiContainer.MarkDirtyRepaint();
         }
 
         private void InsertTextBeforeSelectedLines(string text) {
-            int min = SelectionMin.y;
-            int max = SelectionMax.y;
+            int min = ViewModel.SelectionMin.y;
+            int max = ViewModel.SelectionMax.y;
 
             for (int i = min; i <= max && i < Lines.Count; i++) {
                 ViewModel.InsertText(new Vector2Int(0, i), text);
             }
 
-            CursorX += text.Length;
-            _selectionStart.x += text.Length;
-            _selectionEnd.x += text.Length;
+            ViewModel.CursorX += text.Length;
+            Vector2Int offset = new(1, 0);
+            ViewModel.SetSelectionRange(ViewModel.SelectionStart + offset, ViewModel.SelectionEnd + offset);
             _imguiContainer.MarkDirtyRepaint();
         }
 
         private void RemoveTextBeforeSelectedLines(string text) {
-            int min = SelectionMin.y;
-            int max = SelectionMax.y;
+            int min = ViewModel.SelectionMin.y;
+            int max = ViewModel.SelectionMax.y;
 
             IReadOnlyList<string> lines = Lines;
 
@@ -375,9 +369,10 @@ namespace StillTime.Editor.ScriptEditor {
 
                 ViewModel.DeleteText(new Vector2Int(0, i), new Vector2Int(j, i));
 
-                if (i == _selectionStart.y) _selectionStart.x -= j;
-                if (i == _selectionEnd.y) _selectionEnd.x -= j;
-                if (i == CursorY) CursorX -= j;
+                Vector2Int offset = new(-1, 0);
+                if (i == ViewModel.SelectionStart.y) ViewModel.SelectionStart += offset;
+                if (i == ViewModel.SelectionEnd.y) ViewModel.SelectionEnd += offset;
+                if (i == ViewModel.CursorY) ViewModel.CursorX -= j;
             }
 
             _imguiContainer.MarkDirtyRepaint();
@@ -385,16 +380,16 @@ namespace StillTime.Editor.ScriptEditor {
 
         private void RemoveTextBeforeCursor(string text) {
             IReadOnlyList<string> lines = Lines;
-            string line = lines[CursorY];
+            string line = lines[ViewModel.CursorY];
 
             int i;
-            for (i = 0; i < text.Length && i < CursorX; i++) {
-                int x = CursorX - (i + 1);
+            for (i = 0; i < text.Length && i < ViewModel.CursorX; i++) {
+                int x = ViewModel.CursorX - (i + 1);
                 if (line[x] != text[^(i + 1)]) break;
             }
 
-            ViewModel.DeleteText(new Vector2Int(CursorX - i, CursorY), CursorPosition);
-            CursorX -= i;
+            ViewModel.DeleteText(new Vector2Int(ViewModel.CursorX - i, ViewModel.CursorY), ViewModel.CursorPosition);
+            ViewModel.CursorX -= i;
         }
 
         #endregion
@@ -403,7 +398,6 @@ namespace StillTime.Editor.ScriptEditor {
 
         private Vector2Int GetCursorPosition(Vector2 localMousePosition) {
             IReadOnlyList<string> lines = Lines;
-            if (lines == null) return Vector2Int.zero;
             Rect r = _imguiContainer.contentRect;
 
             Vector2 docMousePos = ViewOffset + localMousePosition - r.min - new Vector2(LineNumberWidth, 0);
@@ -427,25 +421,42 @@ namespace StillTime.Editor.ScriptEditor {
 
         #endregion
 
+        #region Line Formatting
+
+        private string GetFormattedLine(int index) {
+            if (index < 0 || index >= Lines.Count) {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            string? formattedLine = _formattedLines[index];
+            if (formattedLine == null) {
+                formattedLine = ScriptLineFormatter.FormatLine(ViewModel, index);
+                _formattedLines[index] = formattedLine;
+            }
+
+            return formattedLine;
+        }
+
+        #endregion
+
         #region Drawing
 
         private void OnGui() {
             IReadOnlyList<string> lines = Lines;
-            if (lines == null) return;
-
             GUISkin oldSkin = GUI.skin;
             GUI.skin = GuiSkin;
 
             try {
                 Rect r = _imguiContainer.contentRect;
 
+                float scrollValue = ViewModel.ScrollValue;
                 int minVisibleLine =
-                    Mathf.Clamp(Mathf.FloorToInt(_currentScrollValue), 0, lines.Count);
+                    Mathf.Clamp(Mathf.FloorToInt(scrollValue), 0, lines.Count);
                 int maxVisibleLine =
-                    Mathf.Clamp(Mathf.CeilToInt(_currentScrollValue + r.height / LineHeight), 0, lines.Count);
+                    Mathf.Clamp(Mathf.CeilToInt(scrollValue + r.height / LineHeight), 0, lines.Count);
 
                 for (int i = minVisibleLine; i < maxVisibleLine; i++) {
-                    float y = i - _currentScrollValue;
+                    float y = i - scrollValue;
                     Rect rect = new(r.x, r.y + y * LineHeight, r.width, LineHeight);
                     DrawLineBg(i, rect);
 
@@ -455,14 +466,14 @@ namespace StillTime.Editor.ScriptEditor {
                     Rect lineRect = rect;
                     lineRect.xMin = lineNumberRect.xMax;
 
-                    if (_selectionActive) {
+                    if (ViewModel.SelectionActive) {
                         DrawSelectionRect(i, lineRect, lines[i].Length);
                     }
 
-                    DrawTextLine(lineRect, DisplayLines[i]);
+                    DrawTextLine(lineRect, GetFormattedLine(i));
                 }
 
-                if (_cursorActive) {
+                if (ViewModel.CursorActive) {
                     DrawCursor();
                 }
 
@@ -484,8 +495,8 @@ namespace StillTime.Editor.ScriptEditor {
         }
 
         private void DrawSelectionRect(int i, Rect rect, int lineLength) {
-            Vector2Int selectionMin = SelectionMin;
-            Vector2Int selectionMax = SelectionMax;
+            Vector2Int selectionMin = ViewModel.SelectionMin;
+            Vector2Int selectionMax = ViewModel.SelectionMax;
 
             if (i < selectionMin.y || i > selectionMax.y) return;
 
@@ -517,8 +528,8 @@ namespace StillTime.Editor.ScriptEditor {
             if (!_cursorBlinkState) return;
             Rect rect = _imguiContainer.contentRect;
             Vector2 offset = rect.min - ViewOffset;
-            float cursorX = LineNumberWidth + offset.x + CursorX * _charWidth;
-            float cursorY = offset.y + CursorY * LineHeight;
+            float cursorX = LineNumberWidth + offset.x + ViewModel.CursorX * _charWidth;
+            float cursorY = offset.y + ViewModel.CursorY * LineHeight;
 
             Rect cursorRect = new(cursorX - 1, cursorY + 2, 2, LineHeight - 2);
 

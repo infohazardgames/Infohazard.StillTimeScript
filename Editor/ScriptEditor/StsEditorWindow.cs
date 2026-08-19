@@ -1,7 +1,5 @@
 using System;
 using System.IO;
-using System.Linq;
-using Infohazard.StillTimeScript.ViewModel;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -16,8 +14,6 @@ namespace StillTime.Editor.ScriptEditor
         private VisualTreeAsset _visualTree;
 
         private VisualElement _editorRootElement;
-
-        private StsDocumentViewModel _viewModel;
 
         private StsEditorTextArea _textArea;
 
@@ -49,18 +45,10 @@ namespace StillTime.Editor.ScriptEditor
             _textArea = _editorRootElement.Q<StsEditorTextArea>();
 
             string[] lines = File.ReadAllLines(_scriptPath);
-            _viewModel = new StsDocumentViewModel(lines);
-            _viewModel.IsModifiedChanged += OnIsModifiedChanged;
-
-            _editorRootElement.dataSource = _viewModel;
-            _textArea.ViewModel = _viewModel;
+            _textArea.ViewModel.Rebuild(lines);
+            _textArea.ViewModel.IsModifiedChanged += OnIsModifiedChanged;
 
             _editorRootElement.RegisterCallback<KeyDownEvent>(OnKeyDown, CallbackOptions.TrickleDown);
-        }
-
-        private void OnDisable() {
-            _textArea.ViewModel = null;
-            _viewModel.Dispose();
         }
 
         private void OnIsModifiedChanged(bool isModified) {
@@ -70,9 +58,9 @@ namespace StillTime.Editor.ScriptEditor
         private void OnKeyDown(KeyDownEvent evt) {
             if (evt.ctrlKey) {
                 if (evt.keyCode == KeyCode.S) {
-                    if (_viewModel.IsModified) {
-                        File.WriteAllLines(_scriptPath, _viewModel.ScriptLines);
-                        _viewModel.ClearModified();
+                    if (_textArea.ViewModel.IsModified) {
+                        File.WriteAllLines(_scriptPath, _textArea.ViewModel.ScriptLines);
+                        _textArea.ViewModel.ClearModified();
                     }
 
                     evt.StopPropagation();

@@ -1,10 +1,7 @@
-﻿namespace Infohazard.StillTimeScript.ViewModel.Annotations {
+﻿using Infohazard.StillTimeScript.Core.Utility;
+
+namespace Infohazard.StillTimeScript.ViewModel.Annotations {
     public class CommentAnnotation : LineAnnotation {
-        public override string StartText => "<color=green>";
-
-        public override string EndText => "</color>";
-
-        public CommentAnnotation(int lineNumber, int rangeStart, int rangeEnd) :
-            base(lineNumber, rangeStart, rangeEnd) { }
+        public CommentAnnotation(int lineNumber, StsRange range) : base(lineNumber, range) { }
     }
 }

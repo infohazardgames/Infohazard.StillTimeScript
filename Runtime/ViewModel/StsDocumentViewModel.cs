@@ -1,52 +1,139 @@
-﻿using System;
+﻿#nullable enable
+
+using System;
 using System.Collections.Generic;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Cysharp.Threading.Tasks;
+using Infohazard.StillTimeScript.Core.Utility;
 using Infohazard.StillTimeScript.ViewModel.Annotations;
-using UnityEditor;
 using UnityEngine;
 
 namespace Infohazard.StillTimeScript.ViewModel {
     public class StsDocumentViewModel : IDisposable {
         private readonly List<string> _scriptLines;
-        private readonly List<string> _displayLines;
-        private readonly StringBuilder _stringBuilder;
-        private List<List<LineAnnotation>> _annotations;
+        private List<List<LineAnnotation>?>? _annotations;
         private bool _needsToUpdateAnnotations;
-
-        private CancellationTokenSource _annotationCancellationTokenSource;
-        private Task _annotationTask;
-        private List<List<LineAnnotation>> _pendingAnnotations;
+        private int _deferralCount;
+        private Vector2Int? _cursorPosition;
+        private Vector2Int? _selectionStart;
+        private Vector2Int? _selectionEnd;
+        private int _rememberedCursorX;
+        private float _scrollValue;
 
         public IReadOnlyList<string> ScriptLines => _scriptLines;
 
-        public IReadOnlyList<string> DisplayLines => _displayLines;
-
-        public IReadOnlyList<IReadOnlyList<LineAnnotation>> Annotations => _annotations;
-
         public bool IsModified { get; private set; }
 
-        public event Action<bool> IsModifiedChanged;
-        public event Action AnnotationsChanged;
+        public bool CursorActive { get; private set; }
+
+        public Vector2Int CursorPosition {
+            get => _cursorPosition ?? Vector2Int.zero;
+            set {
+                if (value.x < 0 || value.y < 0 || value.y >= _scriptLines.Count) {
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                }
+
+                if (_cursorPosition == value) return;
+                _rememberedCursorX = value.x;
+                _cursorPosition = new Vector2Int(Math.Min(value.x, _scriptLines[value.y].Length), value.y);
+                CursorActive = true;
+                CursorChanged?.Invoke(CursorPosition);
+            }
+        }
+
+        public int CursorX {
+            get => _cursorPosition?.x ?? 0;
+            set => CursorPosition = new Vector2Int(value, CursorPosition.y);
+        }
+
+        public int CursorY {
+            get => _cursorPosition?.y ?? 0;
+            set => CursorPosition = new Vector2Int(_rememberedCursorX, value);
+        }
+
+        public bool SelectionActive { get; private set; }
+
+        public Vector2Int SelectionStart {
+            get => _selectionStart ?? Vector2Int.zero;
+            set {
+                if (!IsValidCursorPosition(value)) {
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                }
+
+                if (_selectionStart == value) return;
+                _selectionStart = value;
+                _selectionEnd ??= value;
+                SelectionActive = true;
+                SelectionChanged?.Invoke(_selectionStart.Value, _selectionEnd.Value);
+            }
+        }
+
+        public Vector2Int SelectionEnd {
+            get => _selectionEnd ?? Vector2Int.zero;
+            set {
+                if (!IsValidCursorPosition(value)) {
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                }
+
+                if (_selectionEnd == value) return;
+                _selectionEnd = value;
+                _selectionStart ??= value;
+                SelectionActive = true;
+                SelectionChanged?.Invoke(_selectionStart.Value, _selectionEnd.Value);
+            }
+        }
+
+        public bool SelectionReverse {
+            get {
+                if (!_selectionStart.HasValue || !_selectionEnd.HasValue) return false;
+
+                return SelectionStart.y == SelectionEnd.y
+                    ? SelectionStart.x > SelectionEnd.x
+                    : SelectionStart.y > SelectionEnd.y;
+            }
+        }
+
+        public Vector2Int SelectionMin => SelectionReverse ? SelectionEnd : SelectionStart;
+        public Vector2Int SelectionMax => SelectionReverse ? SelectionStart : SelectionEnd;
+
+        public Vector2Int EndPosition => ScriptLines.Count == 0
+            ? Vector2Int.zero
+            : new Vector2Int(ScriptLines[^1].Length, ScriptLines.Count - 1);
+
+        public float ScrollValue {
+            get => _scrollValue;
+            set {
+                if (_scrollValue == value) return;
+                _scrollValue = value;
+                ScrollChanged?.Invoke(_scrollValue);
+            }
+        }
+
+        public event Action<bool>? IsModifiedChanged;
+        public event Action<StsRange>? LinesInserted;
+        public event Action<StsRange>? LinesRemoved;
+        public event Action<StsRange>? LinesModified;
+        public event Action<Vector2Int, Vector2Int>? SelectionChanged;
+        public event Action<Vector2Int>? CursorChanged;
+        public event Action<float>? ScrollChanged;
 
         public StsDocumentViewModel(IEnumerable<string> scriptLines) {
             _scriptLines = new List<string>(scriptLines);
-            _displayLines = new List<string>();
-            _stringBuilder = new StringBuilder();
-            for (int i = 0; i < _scriptLines.Count; i++) {
-                _displayLines.Add(ConvertLineForDisplay(i));
-            }
-
-            EditorApplication.update -= Update;
-            EditorApplication.update += Update;
-
             UpdateAnnotations();
         }
 
-        public void Dispose() {
-            EditorApplication.update -= Update;
+        public void Dispose() { }
+
+        public void Rebuild(IEnumerable<string> lines) {
+            int count = _scriptLines.Count;
+            _scriptLines.Clear();
+            _annotations?.Clear();
+            LinesRemoved?.Invoke(new StsRange(0, count));
+
+            _scriptLines.AddRange(lines);
+            LinesInserted?.Invoke(new StsRange(0, _scriptLines.Count));
+            UpdateAnnotations();
+
+            IsModified = true;
+            IsModifiedChanged?.Invoke(true);
         }
 
         public void DeleteText(Vector2Int minPosition, Vector2Int maxPosition) {
@@ -68,17 +155,13 @@ namespace Infohazard.StillTimeScript.ViewModel {
 
             if (maxPosition.y > minPosition.y) {
                 _scriptLines.RemoveRange(minPosition.y + 1, maxPosition.y - minPosition.y);
-                _displayLines.RemoveRange(minPosition.y + 1, maxPosition.y - minPosition.y);
                 _annotations?.RemoveRange(minPosition.y + 1, maxPosition.y - minPosition.y);
+                LinesRemoved?.Invoke(new StsRange(minPosition.y + 1, maxPosition.y - minPosition.y));
             }
 
             _scriptLines[minPosition.y] = keptContentOnFirstLine + keptContentOnLastLine;
-            _displayLines[minPosition.y] = ConvertLineForDisplay(minPosition.y);
-
-            if (_annotations != null) {
-                _annotations[minPosition.y] = new List<LineAnnotation>();
-                AnnotationsChanged?.Invoke();
-            }
+            if (_annotations != null) _annotations[minPosition.y] = null;
+            LinesModified?.Invoke(new StsRange(minPosition.y, 1));
 
             IsModified = true;
             IsModifiedChanged?.Invoke(IsModified);
@@ -97,15 +180,12 @@ namespace Infohazard.StillTimeScript.ViewModel {
             string nextLine = _scriptLines[position.y][position.x..];
 
             _scriptLines[position.y] = curLine;
-            _displayLines[position.y] = ConvertLineForDisplay(position.y);
+            if (_annotations != null) _annotations[position.y] = null;
+            LinesModified?.Invoke(new StsRange(position.y, 1));
 
             _scriptLines.Insert(position.y + 1, nextLine);
-            _displayLines.Insert(position.y + 1, ConvertLineForDisplay(position.y + 1));
-
-            if (_annotations != null) {
-                _annotations.Insert(position.y + 1, new List<LineAnnotation>());
-                AnnotationsChanged?.Invoke();
-            }
+            _annotations?.Insert(position.y + 1, null);
+            LinesInserted?.Invoke(new StsRange(position.y + 1, 1));
 
             IsModified = true;
             IsModifiedChanged?.Invoke(IsModified);
@@ -124,11 +204,8 @@ namespace Infohazard.StillTimeScript.ViewModel {
             string afterCursor = _scriptLines[position.y][position.x..];
 
             _scriptLines[position.y] = beforeCursor + text + afterCursor;
-            _displayLines[position.y] = ConvertLineForDisplay(position.y);
-            if (_annotations != null) {
-                _annotations[position.y] = new List<LineAnnotation>();
-                AnnotationsChanged?.Invoke();
-            }
+            if (_annotations != null) _annotations[position.y] = null;
+            LinesModified?.Invoke(new StsRange(position.y, 1));
 
             IsModified = true;
             IsModifiedChanged?.Invoke(IsModified);
@@ -141,88 +218,72 @@ namespace Infohazard.StillTimeScript.ViewModel {
             IsModifiedChanged?.Invoke(IsModified);
         }
 
-        private string ConvertLineForDisplay(int index) {
-            List<LineAnnotation> annotations = _annotations?[index];
-            string line = _scriptLines[index];
-            _stringBuilder.Clear();
-
-            if (annotations?.Count > 0) {
-                annotations.Sort((a, b) => a.RangeStart.CompareTo(b.RangeStart));
-                int curIndex = 0;
-
-                foreach (LineAnnotation annotation in annotations) {
-                    if (annotation.RangeStart < curIndex) continue;
-
-                    if (annotation.RangeStart > curIndex) {
-                        AppendNoParse(line.AsSpan(curIndex, annotation.RangeStart - curIndex));
-                    }
-
-                    _stringBuilder.Append(annotation.StartText);
-                    AppendNoParse(line.AsSpan(annotation.RangeStart, annotation.RangeEnd - annotation.RangeStart));
-                    _stringBuilder.Append(annotation.EndText);
-                    curIndex = annotation.RangeEnd;
-                }
-
-                if (curIndex < line.Length) {
-                    AppendNoParse(line.AsSpan(curIndex));
-                }
-            } else {
-                AppendNoParse(line);
-            }
-
-            return _stringBuilder.ToString();
-        }
-
-        private void AppendNoParse(ReadOnlySpan<char> text) {
-            _stringBuilder.Append("<noparse>");
-            _stringBuilder.Append(text);
-            _stringBuilder.Append("</noparse>");
-        }
-
         private void UpdateAnnotations() {
-            _needsToUpdateAnnotations = true;
+            if (_deferralCount > 0) {
+                _needsToUpdateAnnotations = true;
+            } else {
+                _annotations = Annotator.Annotate(_scriptLines);
+                LinesModified?.Invoke(new StsRange(0, _scriptLines.Count));
+            }
         }
 
-        private void CancelAnnotation() {
-            _annotationCancellationTokenSource?.Cancel();
-
-            try {
-                _annotationTask.Wait();
-            } catch {
-                // Ignored
+        public List<LineAnnotation>? GetAnnotations(int lineIndex) {
+            if (_annotations == null) return null;
+            if (lineIndex < 0 || lineIndex >= _annotations.Count) {
+                throw new ArgumentOutOfRangeException(nameof(lineIndex));
             }
 
-            _annotationCancellationTokenSource?.Dispose();
-            _annotationCancellationTokenSource = null;
+            return _annotations[lineIndex];
         }
 
-        private void Update() {
-            if (_needsToUpdateAnnotations) {
-                _needsToUpdateAnnotations = false;
-                CancelAnnotation();
-                _annotationCancellationTokenSource = new CancellationTokenSource();
+        public EventDeferral DeferUpdates() {
+            return new EventDeferral(this);
+        }
 
-                List<string> copiedLines = new(_scriptLines);
-                CancellationToken cancellationToken = _annotationCancellationTokenSource.Token;
-
-                _annotationTask = Task.Run(() => {
-                    List<List<LineAnnotation>> annotations = Annotator.Annotate(copiedLines);
-                    cancellationToken.ThrowIfCancellationRequested();
-                    _pendingAnnotations = annotations;
-                }, cancellationToken);
-
-                _annotationTask.AsUniTask().Forget();
+        public void SetSelectionRange(Vector2Int start, Vector2Int end) {
+            if (!IsValidCursorPosition(start)) {
+                throw new ArgumentOutOfRangeException(nameof(start));
             }
 
-            if (_pendingAnnotations != null) {
-                _annotations = _pendingAnnotations;
-                _pendingAnnotations = null;
-                _displayLines.Clear();
-                for (int i = 0; i < _scriptLines.Count; i++) {
-                    _displayLines.Add(ConvertLineForDisplay(i));
+            if (!IsValidCursorPosition(end)) {
+                throw new ArgumentOutOfRangeException(nameof(end));
+            }
+
+            if (_selectionStart == start && _selectionEnd == end) return;
+
+            _selectionStart = start;
+            _selectionEnd = end;
+            SelectionActive = true;
+            SelectionChanged?.Invoke(_selectionStart.Value, _selectionEnd.Value);
+        }
+
+        public void ClearSelection() {
+            _selectionStart = null;
+            _selectionEnd = null;
+            SelectionActive = false;
+            SelectionChanged?.Invoke(Vector2Int.zero, Vector2Int.zero);
+        }
+
+        private bool IsValidCursorPosition(Vector2Int value) {
+            return value.y >= 0 &&
+                   value.y < _scriptLines.Count &&
+                   value.x >= 0 &&
+                   value.x <= _scriptLines[value.y].Length;
+        }
+
+        public readonly struct EventDeferral : IDisposable {
+            private readonly StsDocumentViewModel _viewModel;
+
+            public EventDeferral(StsDocumentViewModel viewModel) {
+                _viewModel = viewModel;
+                _viewModel._deferralCount++;
+            }
+
+            public void Dispose() {
+                _viewModel._deferralCount--;
+                if (_viewModel is { _deferralCount: 0, _needsToUpdateAnnotations: true }) {
+                    _viewModel.UpdateAnnotations();
                 }
-
-                AnnotationsChanged?.Invoke();
             }
         }
     }

@@ -117,8 +117,11 @@ namespace Infohazard.StillTimeScript.Core.Utility {
 
             while (isTextContinued && !state.IsEnded) {
                 ParsingState.LineInfo textLine = state.MoveNext();
+                StsRange actualRange = GetActualRangeFromLine(textLine.Line, textLine.RangeInLine, out _);
+                if (actualRange.Length <= 0) continue;
+
                 result.Append(" ");
-                result.Append(ReadTextToEnd(textLine.Line, textLine.RangeInLine, out isTextContinued).Text);
+                result.Append(ReadTextToEnd(textLine.Line, actualRange, out isTextContinued).Text);
             }
 
             if (result.Length > 0) {
@@ -126,7 +129,7 @@ namespace Infohazard.StillTimeScript.Core.Utility {
             }
         }
 
-        private static Token ReadTextToEnd(string line, StsRange range, out bool isContinued) {
+        public static Token ReadTextToEnd(string line, StsRange range, out bool isContinued) {
             ReadOnlySpan<char> lineToEnd = line[..range.End].TrimEnd();
             isContinued = lineToEnd.EndsWith("\\");
             if (isContinued) {
