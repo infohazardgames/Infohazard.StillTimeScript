@@ -1,6 +1,7 @@
 ﻿#nullable enable
 
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 using Infohazard.StillTimeScript.Core.Utility;
 
@@ -49,14 +50,14 @@ namespace Infohazard.StillTimeScript.Core.Parsers.Macros {
         public string? GetParameterValue(string paramName, LineTokens tokens) {
             int paramIndex = _normalParameters.FindIndex(p => p.Name == paramName);
             if (paramIndex >= 0) {
-                return tokens.Arguments[paramIndex];
+                return tokens.Arguments[paramIndex].Text;
             }
 
             paramIndex = _optionalParameters.FindIndex(p => p.Name == paramName);
             if (paramIndex >= 0) {
                 int indexInArgs = _normalParameters.Count + paramIndex;
                 if (indexInArgs < tokens.Arguments.Length) {
-                    return tokens.Arguments[indexInArgs];
+                    return tokens.Arguments[indexInArgs].Text;
                 } else {
                     return _optionalParameters[paramIndex].DefaultValue;
                 }
@@ -65,26 +66,26 @@ namespace Infohazard.StillTimeScript.Core.Parsers.Macros {
             if (_varArgsParameter.HasValue && _varArgsParameter.Value.Name == paramName) {
                 int varArgStartIndex = _normalParameters.Count + _optionalParameters.Count;
                 if (varArgStartIndex < tokens.Arguments.Length) {
-                    return string.Join(" ", tokens.Arguments[varArgStartIndex..]);
+                    return string.Join(" ", tokens.Arguments[varArgStartIndex..].Select(t => t.Text));
                 } else {
                     return null;
                 }
             }
 
             if (_textParameter.HasValue && _textParameter.Value.Name == paramName) {
-                return tokens.Text;
+                return tokens.Text?.Text;
             }
 
             throw new ParsingException(tokens.LineNumber, tokens.OriginalLine,
                                        $"Unrecognized macro parameter '{paramName}'");
         }
 
-        public void ValidateMacroLine(int lineNumber, string macroLine) {
-            Match match = InterpRegex.Match(macroLine);
+        public void ValidateMacroLine(ParsingState.LineInfo line) {
+            Match match = InterpRegex.Match(line.Line, line.RangeInLine.Start, line.RangeInLine.Length);
             while (match.Success) {
                 string paramName = match.Value[1..];
                 if (GetMacroParameter(paramName) == null) {
-                    throw new ParsingException(lineNumber, macroLine, $"Unrecognized macro parameter '{paramName}'");
+                    throw new ParsingException(line.LineNumber, line.Line, $"Unrecognized macro parameter '{paramName}'");
                 }
 
                 match = match.NextMatch();
@@ -106,10 +107,10 @@ namespace Infohazard.StillTimeScript.Core.Parsers.Macros {
                 _textParameter is { DefaultValue: not null });
         }
 
-        public string EvaluateMacroLine(LineTokens callTokens, string macroLine) {
+        public string EvaluateMacroLine(LineTokens callTokens, string macroLine, StsRange range) {
             string result = macroLine;
 
-            Match match = InterpRegex.Match(macroLine);
+            Match match = InterpRegex.Match(macroLine, range.Start, range.Length);
             while (match.Success) {
                 string paramName = match.Value[1..];
                 string? value = GetParameterValue(paramName, callTokens);

@@ -9,7 +9,9 @@ namespace Infohazard.StillTimeScript.Core.Commands {
     public class BranchCommand : TextCommand, ISequentialCommand {
         public List<IBranchSubCommand> SubCommands { get; } = new();
 
-        public BranchCommand(LineTokens tokens) : base(tokens, tokens.GetArg(0), tokens.Text) { }
+        public BranchCommand(LineTokens tokens) :
+            base(tokens, tokens.GetArg(0), tokens.GetRequiredText()) {
+        }
 
         public override void GatherSubCommands(ref CommandGatheringState state) {
             CommandUtility.GatherSubCommands(this, ref state, SubCommands);

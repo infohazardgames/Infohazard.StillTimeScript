@@ -5,11 +5,11 @@ using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Parsers.Macros {
     public class Macro {
-        public string Identifier { get; }
+        public Token Identifier { get; }
         private readonly MacroParameters _parameters;
         private readonly List<ISubMacro> _subMacros;
 
-        public Macro(string identifier, MacroParameters parameters, List<ISubMacro> subMacros) {
+        public Macro(Token identifier, MacroParameters parameters, List<ISubMacro> subMacros) {
             Identifier = identifier;
             _parameters = parameters;
             _subMacros = subMacros;
@@ -19,10 +19,10 @@ namespace Infohazard.StillTimeScript.Core.Parsers.Macros {
             LineTokens tokens = Tokenizer.TokenizeAndAdvance(state);
             _parameters.ValidateTokens(tokens);
 
-            List<ParsingState.BufferedLine> expandedLines = new();
+            List<ParsingState.LineInfo> expandedLines = new();
             foreach (ISubMacro subMacro in _subMacros) {
                 foreach (string line in subMacro.Expand(tokens)) {
-                    expandedLines.Add(new ParsingState.BufferedLine(tokens.LineNumber, line));
+                    expandedLines.Add(new ParsingState.LineInfo(tokens.LineNumber, line));
                 }
             }
 

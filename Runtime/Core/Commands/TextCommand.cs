@@ -5,27 +5,27 @@ using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Commands {
     public abstract class TextCommand : Command {
-        public string Speaker { get; }
-        public string TextExprStr { get; }
+        public Token? Speaker { get; }
+        public Token TextExprStr { get; }
 
-        public TextCommand(LineTokens tokens, string speaker, string textExprStr) :
+        public TextCommand(LineTokens tokens, Token? speaker, Token textExprStr) :
             this(tokens.LineNumber, tokens.OriginalLine, speaker, textExprStr) { }
 
-        public TextCommand(int lineNumber, string line, string speaker, string textExprStr) : base(lineNumber, line) {
+        public TextCommand(int lineNumber, string line, Token? speaker, Token textExprStr) : base(lineNumber, line) {
             Speaker = speaker;
             TextExprStr = textExprStr;
         }
 
         public Speaker GetSpeaker(GraphData graphData) {
-            if (string.IsNullOrWhiteSpace(Speaker)) {
+            if (Speaker == null) {
                 return null;
             }
 
-            return graphData.GetResource<Speaker>(this, Speaker);
+            return graphData.GetResource<Speaker>(this, Speaker.Value.Text);
         }
 
         protected IExpression GetTextExpression(GraphData graphData) {
-            return ExpressionParser.ParseStringExpression(this, graphData, TextExprStr);
+            return ExpressionParser.ParseStringExpression(this, graphData, Line, TextExprStr.Range);
         }
     }
 }

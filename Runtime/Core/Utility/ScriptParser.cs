@@ -1,8 +1,8 @@
 ﻿using System.Collections.Generic;
 using Infohazard.StillTimeScript.Core.Commands.Interfaces;
-using Infohazard.StillTimeScript.Core.Utility;
+using Infohazard.StillTimeScript.Core.Parsers;
 
-namespace Infohazard.StillTimeScript.Core.Parsers {
+namespace Infohazard.StillTimeScript.Core.Utility {
     public static class ScriptParser {
         public static List<ICommand> ParseScript(string scriptContent) {
             string[] lines = scriptContent.Split('\n');

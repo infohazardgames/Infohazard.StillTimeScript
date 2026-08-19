@@ -7,12 +7,12 @@ using Infohazard.StillTimeScript.Core.Utility;
 namespace Infohazard.StillTimeScript.Core.Commands {
     [AutoCommandParser("label", 1)]
     public class LabelCommand : Command, IResourceCommand, ISubtreeCommand {
-        public string Identifier { get; }
+        public Token Identifier { get; }
 
         public List<ISequentialCommand> Commands { get; } = new();
 
         public LabelCommand(LineTokens tokens) : base(tokens) {
-            Identifier = tokens.GetArg(0);
+            Identifier = tokens.GetRequiredArg(0);
         }
 
         public override void GatherSubCommands(ref CommandGatheringState state) {
@@ -20,12 +20,12 @@ namespace Infohazard.StillTimeScript.Core.Commands {
         }
 
         public void CreateResources(GraphData graphData) {
-            EmptyNode rootNode = new() { FullIdentifier = Identifier };
-            graphData.Nodes.Add(Identifier, rootNode);
+            EmptyNode rootNode = new() { FullIdentifier = Identifier.Text };
+            graphData.Nodes.Add(Identifier.Text, rootNode);
         }
 
         public void BuildSubtree(GraphData graphData) {
-            if (!graphData.Nodes.TryGetValue(Identifier, out INode node) || node is not EmptyNode emptyNode) {
+            if (!graphData.Nodes.TryGetValue(Identifier.Text, out INode node) || node is not EmptyNode emptyNode) {
                 throw new Exception($"Could not find empty node for label {Identifier} in provided dictionary.");
             }
 
@@ -34,7 +34,7 @@ namespace Infohazard.StillTimeScript.Core.Commands {
                 command.ApplyToSequence(builder, graphData);
             }
 
-            CommandUtility.AssignIds(Identifier, builder, graphData);
+            CommandUtility.AssignIds(Identifier.Text, builder, graphData);
             emptyNode.Next = builder.FirstNode;
         }
     }

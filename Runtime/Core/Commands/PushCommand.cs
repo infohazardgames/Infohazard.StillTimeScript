@@ -7,14 +7,15 @@ using Infohazard.StillTimeScript.Core.Utility;
 namespace Infohazard.StillTimeScript.Core.Commands {
     [AutoCommandParser("push", 1)]
     public class PushCommand : Command, ISequentialCommand {
-        public string TargetStr { get; }
+        public Token TargetStr { get; }
 
         public PushCommand(LineTokens tokens) : base(tokens) {
-            TargetStr = tokens.GetArg(0);
+            TargetStr = tokens.GetRequiredArg(0);
         }
 
         public void ApplyToSequence(NodeSequenceBuilder builder, GraphData graphData) {
-            IExpression target = ExpressionParser.ParseExpression(this, graphData, TargetStr, StsValueType.Node);
+            IExpression target =
+                ExpressionParser.ParseExpression(this, graphData, Line, TargetStr.Range, StsValueType.Node);
             PushNode node = new(target);
             builder.Append(node);
         }

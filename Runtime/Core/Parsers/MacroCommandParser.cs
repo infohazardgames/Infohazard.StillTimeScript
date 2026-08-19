@@ -11,30 +11,30 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
     [CustomCommandParser("macro")]
     public class MacroCommandParser : ICommandParser {
         private static readonly string[] StopBeforeCommandsForIf = { "!else", "!elif", "!end" };
-        
+
         public void ParseCommand(ParsingState state, List<ICommand> commands) {
             LineTokens tokens = Tokenizer.TokenizeAndAdvance(state);
             Tokenizer.ValidateTokens(tokens, 1, 1000, false, true);
 
-            string identifier = tokens.Arguments[0];
+            Token identifier = tokens.Arguments[0];
             MacroParameters macroParameters = ParseMacroParameters(tokens);
             List<ISubMacro> subMacros = new();
 
             ParseSubMacros(state, macroParameters, subMacros);
 
             Macro macro = new(identifier, macroParameters, subMacros);
-            state.Macros.Add(identifier, macro);
+            state.Macros.Add(identifier.Text, macro);
         }
 
         private static MacroParameters ParseMacroParameters(LineTokens tokens) {
-            string[] parameters = tokens.Arguments[1..];
+            Token[] parameters = tokens.Arguments[1..];
             List<MacroParameter> normalParams = new();
             List<MacroParameter> optionalParams = new();
             MacroParameter? varArgsParam = null;
             MacroParameter? textParam = null;
 
             for (int i = 0; i < parameters.Length; i++) {
-                string param = parameters[i];
+                string param = parameters[i].Text;
                 string paramName;
                 MacroParameterType paramType;
                 string? defaultValue;
@@ -86,9 +86,9 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                 }
             }
 
-            if (!string.IsNullOrEmpty(tokens.Text)) {
-                if (Tokenizer.IsValidCommandName(tokens.Text)) {
-                    textParam = new MacroParameter(tokens.Text, MacroParameterType.Text, string.Empty);
+            if (tokens.Text != null) {
+                if (Tokenizer.IsValidCommandName(tokens.Text.Value.Text)) {
+                    textParam = new MacroParameter(tokens.Text.Value.Text, MacroParameterType.Text, string.Empty);
                 } else {
                     throw new ParsingException(tokens.LineNumber, tokens.OriginalLine,
                         $"Invalid macro parameter name '{tokens.Text}'");
@@ -105,15 +105,15 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             List<ISubMacro> subMacros,
             string[]? stopBeforeCommands = null) {
             while (!state.IsEnded) {
-                string line = state.CurrentLine!;
-                ReadOnlySpan<char> actualRange = Tokenizer.GetActualSpanFromLine(line);
-                if (actualRange.IsEmpty) {
+                ParsingState.LineInfo line = state.CurrentLine;
+                StsRange actualRange = Tokenizer.GetActualRangeFromLine(line.Line, line.RangeInLine, out _);
+                if (actualRange.Length <= 0) {
                     state.MoveNext();
                     continue;
                 }
 
-                if (stopBeforeCommands is { Length: > 0 } && actualRange.StartsWith("!")) {
-                    string cmdName = Tokenizer.TokenizeCommandName(state).ToString();
+                if (stopBeforeCommands is { Length: > 0 } && line.Line[actualRange.Start] == '!') {
+                    string cmdName = Tokenizer.TokenizeCommandName(state.LineNumber, line.Line, actualRange).ToString();
                     if (Array.IndexOf(stopBeforeCommands, cmdName) != -1) {
                         break;
                     }
@@ -128,17 +128,18 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
 
         private static ISubMacro? ParseSubMacro(
             ParsingState state,
-            ReadOnlySpan<char> actualRange,
+            StsRange actualRange,
             MacroParameters macroParameters) {
-            macroParameters.ValidateMacroLine(state.LineNumber, state.CurrentLine!);
 
-            if (!actualRange.StartsWith("!")) {
-                string line = state.MoveNext()!;
+            ParsingState.LineInfo line = state.CurrentLine;
+            macroParameters.ValidateMacroLine(state.CurrentLine);
 
-                return new RegularLineSubMacro(macroParameters, line);
+            if (line.Line[actualRange.Start] != '!') {
+                line = state.MoveNext();
+                return new RegularLineSubMacro(macroParameters, line.Span.ToString());
             } else {
                 LineTokens subTokens = Tokenizer.TokenizeAndAdvance(state);
-                switch (subTokens.Command) {
+                switch (subTokens.Command.Text) {
                     case "!end":
                         Tokenizer.ValidateTokens(subTokens, 0, 0, false);
                         return null;
@@ -161,17 +162,17 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             List<ISubMacro> elseSection = new();
 
             while (!state.IsEnded) {
-                string line = state.CurrentLine!;
-                ReadOnlySpan<char> actualRange = Tokenizer.GetActualSpanFromLine(line);
-                if (actualRange.IsEmpty) {
+                ParsingState.LineInfo line = state.CurrentLine;
+                StsRange actualRange = Tokenizer.GetActualRangeFromLine(line.Line, line.RangeInLine, out _);
+                if (actualRange.Length <= 0) {
                     state.MoveNext();
                     continue;
                 }
 
-                macroParameters.ValidateMacroLine(state.LineNumber, state.CurrentLine!);
+                macroParameters.ValidateMacroLine(state.CurrentLine);
                 LineTokens subTokens = Tokenizer.TokenizeAndAdvance(state);
                 bool isEnd = false;
-                switch (subTokens.Command) {
+                switch (subTokens.Command.Text) {
                     case "!end":
                         Tokenizer.ValidateTokens(subTokens, 0, 0, false);
                         isEnd = true;
@@ -199,11 +200,11 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             LineTokens tokens,
             ParsingState state,
             MacroParameters macroParameters) {
-            string[] conditions = tokens.Arguments;
-            foreach (string condition in conditions) {
-                if (macroParameters.GetMacroParameter(condition) == null) {
-                    throw new ParsingException(tokens.LineNumber, tokens.Text,
-                        $"Unrecognized macro parameter '{condition}'");
+            Token[] conditions = tokens.Arguments;
+            foreach (Token condition in conditions) {
+                if (macroParameters.GetMacroParameter(condition.Text) == null) {
+                    throw new ParsingException(tokens.LineNumber, tokens.GetRequiredText().Text,
+                        $"Unrecognized macro parameter '{condition.Text}'");
                 }
             }
 

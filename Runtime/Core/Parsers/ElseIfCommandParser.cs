@@ -12,8 +12,8 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             ElseIfCommand command = new(tokens.LineNumber, tokens.OriginalLine, tokens.Arguments[0]);
             commands.Add(command);
 
-            if (!string.IsNullOrEmpty(tokens.Text)) {
-                state.Prepend(tokens.LineNumber, tokens.Text);
+            if (tokens.Text != null) {
+                state.Prepend(tokens.LineNumber, tokens.OriginalLine, tokens.GetRequiredText().Range);
             }
         }
     }

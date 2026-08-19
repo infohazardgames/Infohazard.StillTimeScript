@@ -1,17 +1,19 @@
-﻿namespace Infohazard.StillTimeScript.Core.Utility {
+﻿using System;
+
+namespace Infohazard.StillTimeScript.Core.Utility {
     public struct LineTokens {
         public int LineNumber { get; }
         public string OriginalLine { get; }
-        public string Command { get; }
-        public string[] Arguments { get; }
-        public string Text { get; }
+        public Token Command { get; }
+        public Token[] Arguments { get; }
+        public Token? Text { get; }
 
         public LineTokens(
             int lineNumber,
             string originalLine,
-            string command,
-            string[] arguments,
-            string text) {
+            Token command,
+            Token[] arguments,
+            Token? text) {
             LineNumber = lineNumber;
             OriginalLine = originalLine;
             Command = command;
@@ -19,8 +21,18 @@
             Text = text;
         }
 
-        public string GetArg(int index) {
+        public Token? GetArg(int index) {
             return Arguments != null && Arguments.Length > index ? Arguments[index] : null;
+        }
+
+        public Token GetRequiredArg(int index) {
+            return Arguments != null && Arguments.Length > index
+                ? Arguments[index]
+                : throw new ArgumentException($"Argument at index {index} is required but not provided.");
+        }
+
+        public Token GetRequiredText() {
+            return Text ?? throw new ArgumentException("Text is required but not provided.");
         }
     }
 }

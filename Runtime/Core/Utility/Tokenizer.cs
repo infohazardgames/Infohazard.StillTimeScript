@@ -16,16 +16,28 @@ namespace Infohazard.StillTimeScript.Core.Utility {
 
         public static LineTokens TokenizeAndAdvance(ParsingState parsingState) {
             int lineNumber = parsingState.LineNumber;
-            string line = parsingState.MoveNext();
+            ParsingState.LineInfo line = parsingState.MoveNext();
+            LineTokens tokens = Tokenize(lineNumber, line.Line, line.RangeInLine, out bool isContinued);
 
-            ReadOnlySpan<char> actualLineSpan = GetActualSpanFromLine(line);
-            if (actualLineSpan.IsEmpty) {
+            if (isContinued) {
+                Token text = tokens.GetRequiredText();
+                ReadContinuingText(parsingState, ref text);
+                tokens = new LineTokens(tokens.LineNumber, tokens.OriginalLine, tokens.Command, tokens.Arguments, text);
+            }
+
+            return tokens;
+        }
+
+        public static LineTokens Tokenize(int lineNumber, string line, StsRange range, out bool isTextContinued) {
+            StsRange actualRange = GetActualRangeFromLine(line, range, out _);
+
+            if (actualRange.Length == 0) {
                 throw new Exception("Unexpected state");
             }
 
-            int cmdEnd = 0;
-            for (int i = 0; i < actualLineSpan.Length; i++) {
-                char c = actualLineSpan[i];
+            int cmdEnd = actualRange.Start;
+            for (int i = actualRange.Start; i < actualRange.End; i++) {
+                char c = line[i];
                 if (IsValidCommandNameCharacter(c) || c == '!') {
                     cmdEnd++;
                 } else {
@@ -33,82 +45,97 @@ namespace Infohazard.StillTimeScript.Core.Utility {
                 }
             }
 
-            if (cmdEnd == 0) {
+            if (cmdEnd == actualRange.Start) {
                 throw new ParsingException(lineNumber, line, "Failed to parse command name");
             }
 
-            string cmd = actualLineSpan[..cmdEnd].ToString();
-            string[] args = null;
+            Token cmd = Token.FromRangeInSource(actualRange.Start..cmdEnd, line);
+            Token[] args = null;
 
-            ReadOnlySpan<char> remaining = actualLineSpan[cmdEnd..].Trim();
-            if (remaining.StartsWith("(")) {
-                int argsEnd = 0;
-                List<string> argList = TokenizeArgumentList(lineNumber, line, remaining, ref argsEnd);
-                args = argList.Count > 0 ? argList.ToArray() : null;
-                remaining = remaining[argsEnd..].Trim();
+            StsRange remaining = StsRange.FromStartEnd(cmdEnd, actualRange.End).Trim(line);
+            if (remaining.Length == 0) {
+                isTextContinued = false;
+                return new LineTokens(lineNumber, line, cmd, null, null);
             }
 
-            if (remaining.IsEmpty) {
+            if (line[remaining.Start] == '(') {
+                int argsEnd = remaining.Start;
+                List<Token> argList = TokenizeArgumentList(lineNumber, line, ref argsEnd, remaining.End);
+                args = argList.Count > 0 ? argList.ToArray() : null;
+                remaining = StsRange.FromStartEnd(argsEnd, actualRange.End).Trim(line);
+            }
+
+            if (remaining.Length == 0) {
+                isTextContinued = false;
                 return new LineTokens(lineNumber, line, cmd, args, null);
             }
 
-            if (!remaining.StartsWith(":")) {
+            if (line[remaining.Start] != ':') {
                 throw new ParsingException(lineNumber, line, "Expected ':' before text");
             }
 
-            string text = ReadText(remaining[1..], out bool isTextContinued);
-
-            if (isTextContinued) {
-                ReadContinuingText(parsingState, ref text);
-            }
-
+            remaining.Min++;
+            Token text = ReadTextToEnd(line, remaining, out isTextContinued);
             return new LineTokens(lineNumber, line, cmd, args, text);
         }
 
-        public static ReadOnlySpan<char> TokenizeCommandName(in ParsingState parsingState) {
-            string line = parsingState.CurrentLine;
-            ReadOnlySpan<char> actualSpan = GetActualSpanFromLine(line);
+        public static Token TokenizeCommandName(int lineNumber, string line, StsRange range) {
+            StsRange actualRange = GetActualRangeFromLine(line, range, out _);
 
-            int cmdEnd = 0;
-            while (cmdEnd < actualSpan.Length) {
-                char curChar = actualSpan[cmdEnd];
+            int cmdEnd = actualRange.Start;
+            while (cmdEnd < actualRange.End) {
+                char curChar = line[cmdEnd];
                 if (!IsValidCommandNameCharacter(curChar) && curChar != '!') break;
                 cmdEnd++;
             }
 
             if (cmdEnd == 0) {
-                throw new ParsingException(parsingState.LineNumber, line, "Failed to tokenize command name");
+                throw new ParsingException(lineNumber, line, "Failed to tokenize command name");
             }
 
-            return actualSpan[..cmdEnd];
+            return Token.FromRangeInSource(actualRange.Start..cmdEnd, line);
         }
 
-        public static ReadOnlySpan<char> GetActualSpanFromLine(string line) {
-            int commentIndex = line.IndexOf("//", StringComparison.Ordinal);
+        public static StsRange GetActualRangeFromLine(string line, StsRange range, out StsRange? commentRange) {
+            int commentIndex = line.IndexOf("//", range.Start, StringComparison.Ordinal);
 
-            ReadOnlySpan<char> actualSpan = commentIndex >= 0 ? line.AsSpan(0, commentIndex) : line;
-            return actualSpan.Trim();
+            StsRange actualRange;
+            if (commentIndex >= 0 && commentIndex < range.End) {
+                actualRange = StsRange.FromStartEnd(range.Start, commentIndex);
+                commentRange = StsRange.FromStartEnd(commentIndex, line.Length);
+            } else {
+                actualRange = range;
+                commentRange = null;
+            }
+
+            return actualRange.Trim(line);
         }
 
-        private static void ReadContinuingText(ParsingState state, ref string text) {
+        private static void ReadContinuingText(ParsingState state, ref Token text) {
             StringBuilder result = new();
             bool isTextContinued = true;
 
             while (isTextContinued && !state.IsEnded) {
-                string textLine = state.MoveNext();
+                ParsingState.LineInfo textLine = state.MoveNext();
                 result.Append(" ");
-                result.Append(ReadText(textLine.AsSpan().Trim(), out isTextContinued));
+                result.Append(ReadTextToEnd(textLine.Line, textLine.RangeInLine, out isTextContinued).Text);
             }
 
             if (result.Length > 0) {
-                text += result.ToString();
+                text.Text += result.ToString();
             }
         }
 
-        public static string ReadText(ReadOnlySpan<char> text, out bool isContinued) {
-            isContinued = text.EndsWith("\\");
-            Index endIndex = isContinued ? ^1 : ^0;
-            return text[..endIndex].Trim().ToString();
+        private static Token ReadTextToEnd(string line, StsRange range, out bool isContinued) {
+            ReadOnlySpan<char> lineToEnd = line[..range.End].TrimEnd();
+            isContinued = lineToEnd.EndsWith("\\");
+            if (isContinued) {
+                lineToEnd = lineToEnd[..^1];
+            }
+
+            int index = range.Start;
+            SkipWhitespace(lineToEnd, ref index, null);
+            return new Token(new StsRange(index, lineToEnd.Length - index), lineToEnd[index..].ToString());
         }
 
         public static void ValidateTokens(
@@ -134,46 +161,50 @@ namespace Infohazard.StillTimeScript.Core.Utility {
             }
         }
 
-        public static List<string> TokenizeArgumentList(
+        public static List<Token> TokenizeArgumentList(
             int lineNumber,
             string line,
-            ReadOnlySpan<char> span,
-            ref int index) {
+            ref int index,
+            int? end) {
 
-            SkipWhitespace(span, ref index);
-            EnsureNotAtEnd(lineNumber, line, span, index);
-            if (span[index++] != '(') {
-                throw new ParsingException(lineNumber, span.ToString(), $"Expected '(' at index {index}");
+            SkipWhitespace(line, ref index, end);
+            EnsureNotAtEnd(lineNumber, line, index, end);
+
+            if (line[index] != '(') {
+                throw new ParsingException(lineNumber, line, $"Expected '(' at index {index}");
             }
 
-            SkipWhitespace(span, ref index);
+            index++;
 
-            List<string> result = new();
-            while (EnsureNotAtEnd(lineNumber, line, span, index) && span[index] != ')') {
-                EnsureNotAtEnd(lineNumber, line, span, index);
-                string argument = TokenizeArgument(lineNumber, line, span, ref index);
+            SkipWhitespace(line, ref index, end);
+
+            List<Token> result = new();
+            while (EnsureNotAtEnd(lineNumber, line, index, end) && line[index] != ')') {
+                Token argument = TokenizeArgument(lineNumber, line, ref index, end);
                 result.Add(argument);
-                SkipWhitespace(span, ref index);
-                EnsureNotAtEnd(lineNumber, line, span, index);
-                if (span[index] != ',') continue;
+                SkipWhitespace(line, ref index, end);
+                EnsureNotAtEnd(lineNumber, line, index, end);
+                if (line[index] != ',') continue;
 
                 index++;
-                SkipWhitespace(span, ref index);
+                SkipWhitespace(line, ref index, end);
             }
+
             index++;
 
             return result;
         }
 
-        private static string TokenizeArgument(int lineNumber, string line, ReadOnlySpan<char> span, ref int index) {
+        private static Token TokenizeArgument(int lineNumber, string line, ref int index, int? end) {
             int openCount = 0;
 
-            int end;
-            EnsureNotAtEnd(lineNumber, line, span, index);
-            for (end = index; end < span.Length; end++) {
-                char c = span[end];
+            end ??= line.Length;
+            int argEnd;
+            EnsureNotAtEnd(lineNumber, line, index, end);
+            for (argEnd = index; argEnd < end.Value; argEnd++) {
+                char c = line[argEnd];
                 if (c == '"') {
-                    end = GetEndOfStringLiteral(lineNumber, line, span, end) - 1;
+                    argEnd = GetEndOfStringLiteral(lineNumber, line, argEnd, end) - 1;
                 } else if (c == '(') {
                     openCount++;
                 } else if (c == ')') {
@@ -187,29 +218,32 @@ namespace Infohazard.StillTimeScript.Core.Utility {
                 }
             }
 
-            string result = span[index..end].ToString();
-            index = end;
+            Token result = Token.FromRangeInSource(index..argEnd, line);
+            index = argEnd;
             return result;
         }
 
-        public static void SkipWhitespace(ReadOnlySpan<char> span, ref int index) {
-            while (index < span.Length && char.IsWhiteSpace(span[index])) {
+        public static void SkipWhitespace(ReadOnlySpan<char> span, ref int index, int? end) {
+            int max = end ?? span.Length;
+
+            while (index < max && char.IsWhiteSpace(span[index])) {
                 index++;
             }
         }
 
-        public static bool EnsureNotAtEnd(int lineNumber, string line, ReadOnlySpan<char> span, int index) {
-            if (index >= span.Length) {
+        public static bool EnsureNotAtEnd(int lineNumber, string line, int index, int? end) {
+            if (index >= line.Length || index >= end) {
                 throw new ParsingException(lineNumber, line, "Unexpected end of line");
             }
 
             return true;
         }
 
-        public static int GetEndOfStringLiteral(int lineNumber, string line, ReadOnlySpan<char> span, int index) {
+        public static int GetEndOfStringLiteral(int lineNumber, string line, Index start, Index? end) {
             bool isEscape = false;
-            for (int i = index + 1; i < span.Length; i++) {
-                char c = span[i];
+            int endOffset = end?.GetOffset(line.Length) ?? line.Length;
+            for (int i = start.GetOffset(line.Length) + 1; i < endOffset; i++) {
+                char c = line[i];
 
                 if (isEscape) {
                     isEscape = false;
@@ -221,6 +255,14 @@ namespace Infohazard.StillTimeScript.Core.Utility {
             }
 
             throw new ParsingException(lineNumber, line, "Encountered non-closed string literal.");
+        }
+
+        public static Index Add(this Index index, int value) {
+            if (index.IsFromEnd) {
+                return new Index(index.Value - value);
+            } else {
+                return new Index(index.Value + value);
+            }
         }
     }
 }

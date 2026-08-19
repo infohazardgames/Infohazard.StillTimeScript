@@ -4,11 +4,11 @@ using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Commands {
     public class ElseIfCommand : Command {
-        public string Condition { get; }
+        public Token Condition { get; }
 
         public List<ISequentialCommand> Commands { get; } = new();
 
-        public ElseIfCommand(int lineNumber, string line, string condition) : base(lineNumber, line) {
+        public ElseIfCommand(int lineNumber, string line, Token condition) : base(lineNumber, line) {
             Condition = condition;
         }
 

@@ -20,6 +20,10 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             }
         }
 
+        public static bool IsCommand(string commandName) {
+            return CustomParsers.ContainsKey(commandName) || AutoParsedTypes.ContainsKey(commandName);
+        }
+
         private static void CheckCustomParserAttributes(Type type) {
             CustomCommandParserAttribute[] attributes =
                 type.GetCustomAttributes<CustomCommandParserAttribute>().ToArray();
@@ -61,22 +65,22 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
         }
 
         public static void ParseLine(ParsingState state, List<ICommand> commands) {
-            string line = state.CurrentLine;
+            ParsingState.LineInfo line = state.CurrentLine;
 
-            while (!state.IsEnded) {
-                ReadOnlySpan<char> actualSpan = Tokenizer.GetActualSpanFromLine(line);
+            StsRange actualRange;
+            while (true) {
+                actualRange = Tokenizer.GetActualRangeFromLine(line.Line, line.RangeInLine, out _);
 
-                if (!actualSpan.IsEmpty) {
+                if (actualRange.Length > 0) {
                     break;
                 } else {
                     state.MoveNext();
+                    if (state.IsEnded) return;
                     line = state.CurrentLine;
                 }
             }
 
-            if (state.IsEnded) return;
-
-            string cmd = Tokenizer.TokenizeCommandName(state).ToString();
+            string cmd = Tokenizer.TokenizeCommandName(state.LineNumber, line.Line, actualRange).ToString();
 
             int version = state.Version;
 
@@ -92,17 +96,17 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                     ICommand command = (ICommand) Activator.CreateInstance(item.Item1, tokens);
                     commands.Add(command);
                 } catch (Exception ex) {
-                    throw new ParsingException(tokens.LineNumber, tokens.Text,
+                    throw new ParsingException(tokens.LineNumber, tokens.OriginalLine,
                                                $"Error occurred when constructing auto-parsed command:\n{ex}");
                 }
             } else if (state.Macros.TryGetValue(cmd, out Macro macro)) {
                 macro.ExpandCall(state);
             } else {
-                throw new ParsingException(state.LineNumber, line, $"No parser or macro found for command '{cmd}'");
+                throw new ParsingException(state.LineNumber, line.Line, $"No parser or macro found for command '{cmd}'");
             }
 
             if (state.Version == version) {
-                throw new ParsingException(state.LineNumber, line,
+                throw new ParsingException(state.LineNumber, line.Line,
                                            $"Command '{cmd}' did not advance the parsing state");
             }
         }

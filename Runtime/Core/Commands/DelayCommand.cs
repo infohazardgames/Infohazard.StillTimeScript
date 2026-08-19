@@ -7,14 +7,15 @@ using Infohazard.StillTimeScript.Core.Utility;
 namespace Infohazard.StillTimeScript.Core.Commands {
     [AutoCommandParser("delay", 1)]
     public class DelayCommand : Command, ISequentialCommand {
-        public string TimeStr { get; }
+        public Token TimeStr { get; }
 
         public DelayCommand(LineTokens tokens) : base(tokens) {
-            TimeStr = tokens.GetArg(0);
+            TimeStr = tokens.GetRequiredArg(0);
         }
 
         public void ApplyToSequence(NodeSequenceBuilder builder, GraphData graphData) {
-            IExpression timeExpr = ExpressionParser.ParseExpression(this, graphData, TimeStr, StsValueType.Number);
+            IExpression timeExpr =
+                ExpressionParser.ParseExpression(this, graphData, Line, TimeStr.Range, StsValueType.Number);
             builder.Append(new DelayNode(timeExpr));
         }
     }

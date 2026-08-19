@@ -77,32 +77,35 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             BinaryOperatorParsingPriority.Sort((a, b) => b.Length - a.Length);
         }
 
-        public static IExpression ParseStringExpression(Command command, GraphData graphData, string stringExpr) {
+        public static IExpression ParseStringExpression(Command command, GraphData graphData, string line, StsRange range) {
             StringConcatExpression expression = new();
 
-            MatchCollection collection = StringInterpRegex.Matches(stringExpr);
+            MatchCollection collection = StringInterpRegex.Matches(line, range.Start);
 
             int curIndex = 0;
             foreach (Match match in collection) {
-                if (match.Index - curIndex > 0) {
-                    expression.AddExpression(
-                        new ConstantExpression(new StsValue(EscapeString(command, stringExpr[curIndex..match.Index]))));
+                if (match.Index + match.Length > range.End) {
+                    break;
                 }
 
-                string inner = match.Groups.Count > 1 ? match.Groups[1].Value : string.Empty;
+                if (match.Index - curIndex > 0) {
+                    expression.AddExpression(
+                        new ConstantExpression(new StsValue(EscapeString(command, line[curIndex..match.Index]))));
+                }
 
-                if (string.IsNullOrWhiteSpace(inner)) {
-                    expression.AddExpression(new ConstantExpression(new StsValue(string.Empty)));
-                } else {
-                    expression.AddExpression(ParseExpression(command, graphData, inner));
+                Group group = match.Groups.Count > 1 ? match.Groups[1] : null;
+                StsRange? innerRange = group != null ? new StsRange(group.Index, group.Length) : null;
+
+                if (innerRange is { Length: > 0 }) {
+                    expression.AddExpression(ParseExpression(command, graphData, line, innerRange.Value));
                 }
 
                 curIndex = match.Index + match.Length;
             }
 
-            if (curIndex < stringExpr.Length) {
+            if (curIndex < range.End) {
                 expression.AddExpression(
-                    new ConstantExpression(new StsValue(EscapeString(command, stringExpr[curIndex..]))));
+                    new ConstantExpression(new StsValue(EscapeString(command, line[curIndex..range.End]))));
             }
 
             return expression;
@@ -137,20 +140,22 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             return builder.ToString();
         }
 
-        public static IExpression ParseExpression(Command command, GraphData graphData, ReadOnlySpan<char> span,
+        public static IExpression ParseExpression(Command command, GraphData graphData, string line, StsRange range,
                                                   StsValueType requiredType = StsValueType.None) {
+
+            int index = range.Start;
             IExpression expression = ParseExpression(
                 command,
                 graphData,
-                span,
-                0,
+                line,
+                ref index,
                 ReadOnlySpan<char>.Empty,
-                out int endIndex);
+                range.End);
 
-            Tokenizer.SkipWhitespace(span, ref endIndex);
-            if (endIndex < span.Length)
-                throw new ParsingException(command.LineNumber, span.ToString(),
-                                           $"Unexpected character '{span[endIndex]}'");
+            Tokenizer.SkipWhitespace(line, ref index, range.End);
+            if (index < range.End)
+                throw new ParsingException(command.LineNumber, command.Line,
+                                           $"Unexpected character '{line[index]}'");
 
             if (requiredType != StsValueType.None && expression.Type != requiredType) {
                 throw new ParsingException(command.LineNumber, command.Line,
@@ -163,49 +168,49 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
         private static IExpression ParseExpression(
             Command command,
             GraphData graphData,
-            ReadOnlySpan<char> span,
-            int startIndex,
+            string line,
+            ref int index,
             ReadOnlySpan<char> endChars,
-            out int endIndex) {
+            int? end) {
             IExpression result = ReadBinaryOperatorsWithEarlierPrecedence(
                 command,
                 graphData,
-                span,
-                startIndex,
+                line,
+                ref index,
                 endChars,
                 BinaryOperatorPrecedence.Length,
-                out endIndex);
+                end);
 
             if (endChars.IsEmpty) return result;
 
-            Tokenizer.EnsureNotAtEnd(command.LineNumber, command.Line, span, endIndex);
-            if (!endChars.Contains(span.Slice(endIndex, 1), StringComparison.Ordinal))
+            Tokenizer.EnsureNotAtEnd(command.LineNumber, command.Line, index, end);
+            if (!endChars.Contains(line.AsSpan(index, 1), StringComparison.Ordinal))
                 throw new Exception("Unexpected end of line");
 
-            endIndex++;
+            index++;
             return result;
         }
 
         private static IExpression ReadBinaryOperatorsWithEarlierPrecedence(
             Command command,
             GraphData graphData,
-            ReadOnlySpan<char> span,
-            int startIndex,
+            string line,
+            ref int index,
             ReadOnlySpan<char> endChars,
             int precedence,
-            out int endIndex) {
-            int index = startIndex;
-            IExpression currentOperand = ReadPrimaryAndUnaryOperators(command, graphData, span, index, out index);
+            int? end) {
+            end ??= line.Length;
+            IExpression currentOperand = ReadPrimaryAndUnaryOperators(command, graphData, line, ref index, end);
 
             while (true) {
-                Tokenizer.SkipWhitespace(span, ref index);
-                if (endChars.IsEmpty && index >= span.Length) break;
-                Tokenizer.EnsureNotAtEnd(command.LineNumber, command.Line, span, index);
-                if (endChars.Contains(span.Slice(index, 1), StringComparison.Ordinal)) break;
+                Tokenizer.SkipWhitespace(line, ref index, end);
+                if (endChars.IsEmpty && index >= end) break;
+                Tokenizer.EnsureNotAtEnd(command.LineNumber, command.Line, index, end);
+                if (endChars.Contains(line.AsSpan(index, 1), StringComparison.Ordinal)) break;
 
                 string op = null;
                 foreach (string s in BinaryOperatorParsingPriority) {
-                    if (!span[index..].StartsWith(s)) continue;
+                    if (!line.AsSpan(index, end.Value - index).StartsWith(s)) continue;
                     op = s;
                     break;
                 }
@@ -214,24 +219,24 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                     throw new ParsingException(
                         command.LineNumber,
                         command.Line,
-                        $"Encountered unexpected character(s) while parsing expression: {span[index..].ToString()}");
+                        $"Encountered unexpected character(s) while parsing expression: {line[index..]}");
                 }
 
                 int operatorPrecedence = BinaryOperatorPrecedenceMap[op];
                 if (operatorPrecedence >= precedence) break;
 
                 index += op.Length;
-                Tokenizer.SkipWhitespace(span, ref index);
-                Tokenizer.EnsureNotAtEnd(command.LineNumber, command.Line, span, index);
+                Tokenizer.SkipWhitespace(line, ref index, end);
+                Tokenizer.EnsureNotAtEnd(command.LineNumber, command.Line, index, end);
                 IExpression nextOperand =
                     ReadBinaryOperatorsWithEarlierPrecedence(
                         command,
                         graphData,
-                        span,
-                        index,
+                        line,
+                        ref index,
                         endChars,
                         operatorPrecedence,
-                        out index);
+                        end);
 
                 if (BinaryMathOperators.TryGetValue(op, out BinaryMathOperator binaryMathOperator)) {
                     currentOperand =
@@ -252,25 +257,23 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                 }
             }
 
-            endIndex = index;
             return currentOperand;
         }
 
         private static IExpression ReadPrimaryAndUnaryOperators(
             Command command,
             GraphData graphData,
-            ReadOnlySpan<char> span,
-            int startIndex,
-            out int endIndex) {
-            int index = startIndex;
+            string line,
+            ref int index,
+            int? end) {
+            Tokenizer.SkipWhitespace(line, ref index, end);
+            char c = line[index];
 
-            Tokenizer.SkipWhitespace(span, ref index);
-            char c = span[index];
+            end ??= line.Length;
 
             if (c is '!' or '-') {
                 index++;
-                IExpression operand = ReadPrimaryAndUnaryOperators(command, graphData, span, index, out index);
-                endIndex = index;
+                IExpression operand = ReadPrimaryAndUnaryOperators(command, graphData, line, ref index, end);
                 if (c == '!') {
                     return new UnaryLogicExpression(UnaryLogicOperator.Not, operand);
                 } else {
@@ -280,21 +283,23 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
 
             if (c == '(') {
                 index++;
-                return ParseExpression(command, graphData, span, index, ")", out endIndex);
+                return ParseExpression(command, graphData, line, ref index, ")", end);
             }
 
             if (c == '"') {
-                endIndex = Tokenizer.GetEndOfStringLiteral(command.LineNumber, command.Line, span, index);
-                string stringContent = span[(index + 1)..(endIndex - 1)].ToString();
-                return ParseStringExpression(command, graphData, stringContent);
+                int strEnd = Tokenizer.GetEndOfStringLiteral(command.LineNumber, line, index, end);
+                IExpression strEx =
+                    ParseStringExpression(command, graphData, line, StsRange.FromStartEnd(index + 1, strEnd - 1));
+                index = strEnd;
+                return strEx;
             }
 
             foreach (string funcOp in FunctionOperators) {
-                if (!span[index..].StartsWith(funcOp)) continue;
+                if (!line.AsSpan(index, end.Value - index).StartsWith(funcOp)) continue;
                 index += funcOp.Length;
                 List<IExpression> arguments =
-                    Tokenizer.TokenizeArgumentList(command.LineNumber, command.Line, span, ref index)
-                             .Select(arg => ParseExpression(command, graphData, arg))
+                    Tokenizer.TokenizeArgumentList(command.LineNumber, line, ref index, end)
+                             .Select(arg => ParseExpression(command, graphData, line, arg.Range))
                              .ToList();
 
                 if (funcOp == VisitedFunction) {
@@ -305,7 +310,6 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                             $"Expected 2 arguments for 'visited' function, got {arguments.Count}");
                     }
 
-                    endIndex = index;
                     return new VisitedExpression(arguments[0], arguments[1]);
                 } else if (funcOp == CompareExchangeFunction) {
                     if (arguments.Count is < 1 or > 3) {
@@ -322,7 +326,6 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                             $"Expected first argument of 'compex' function to be a variable, got {arguments[0]}");
                     }
 
-                    endIndex = index;
                     return new CompareExchangeExpression(
                         varEx.Variable,
                         arguments.Count > 1 ? arguments[1] : null,
@@ -330,28 +333,31 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                 }
             }
 
-            int end;
-            for (end = index; end < span.Length; end++) {
-                c = span[end];
+            int i;
+            for (i = index; i < end; i++) {
+                c = line[i];
                 if (!char.IsLetterOrDigit(c) && c != '_' && c != '#' && c != '.') break;
             }
 
-            ReadOnlySpan<char> item = span[index..end];
-            endIndex = end;
-            return ParseSingleItemExpression(command, graphData, item.ToString());
+            StsRange singleItemRange = StsRange.FromStartEnd(index, i);
+            index = i;
+            return ParseSingleItemExpression(command, graphData, line, singleItemRange);
         }
 
         private static IExpression ParseSingleItemExpression(Command command, GraphData graphData,
-                                                             ReadOnlySpan<char> item) {
-            if (item.StartsWith("#") && StsColor.TryParseHex(item, out StsColor color)) {
+                                                             string line, StsRange range) {
+
+            ReadOnlySpan<char> span = line.AsSpan(range.Start, range.Length);
+
+            if (span.StartsWith("#") && StsColor.TryParseHex(span, out StsColor color)) {
                 return new ConstantExpression(new StsValue(color));
-            } else if (decimal.TryParse(item, out decimal num)) {
+            } else if (decimal.TryParse(span, out decimal num)) {
                 return new ConstantExpression(new StsValue(num));
-            } else if (bool.TryParse(item, out bool b)) {
+            } else if (bool.TryParse(span, out bool b)) {
                 return new ConstantExpression(new StsValue(b));
             }
 
-            string itemStr = item.ToString();
+            string itemStr = span.ToString();
             if (graphData.Resources.TryGetValue(itemStr, out Resource.Resource resource)) {
                 if (resource is Variable variable) {
                     return new VariableExpression(variable);
@@ -361,7 +367,7 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             } else if (graphData.Nodes.TryGetValue(itemStr, out INode node)) {
                 return new ConstantExpression(new StsValue(node));
             } else {
-                throw new ParsingException(command.LineNumber, command.Line, $"Failed to parse value: '{itemStr}'");
+                throw new ParsingException(command.LineNumber, command.Line, $"Failed to parse value at {range}: '{itemStr}'");
             }
         }
     }

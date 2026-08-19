@@ -7,7 +7,7 @@ using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Commands {
     public class IfCommand : Command, ISequentialCommand {
-        public string Condition { get; }
+        public Token Condition { get; }
 
         public List<ISequentialCommand> Commands { get; } = new();
 
@@ -15,7 +15,7 @@ namespace Infohazard.StillTimeScript.Core.Commands {
 
         public ElseCommand ElseCommand { get; set; }
 
-        public IfCommand(int lineNumber, string line, string condition) : base(lineNumber, line) {
+        public IfCommand(int lineNumber, string line, Token condition) : base(lineNumber, line) {
             Condition = condition;
         }
 
@@ -26,8 +26,8 @@ namespace Infohazard.StillTimeScript.Core.Commands {
         }
 
         public void ApplyToSequence(NodeSequenceBuilder builder, GraphData graphData) {
-            IExpression expression = ExpressionParser.ParseExpression(this, graphData, Condition);
-            
+            IExpression expression = ExpressionParser.ParseExpression(this, graphData, Line, Condition.Range);
+
             IfNode firstIfNode = new(expression);
             builder.Append(firstIfNode);
 
@@ -36,7 +36,8 @@ namespace Infohazard.StillTimeScript.Core.Commands {
 
             IfNode lastIfNode = firstIfNode;
             foreach (ElseIfCommand elseIf in ElseIfCommands) {
-                IExpression elseIfCondition = ExpressionParser.ParseExpression(this, graphData, elseIf.Condition);
+                IExpression elseIfCondition =
+                    ExpressionParser.ParseExpression(this, graphData, elseIf.Line, elseIf.Condition.Range);
                 IfNode nextIfNode = new(elseIfCondition);
                 builder.Append(nextIfNode);
 

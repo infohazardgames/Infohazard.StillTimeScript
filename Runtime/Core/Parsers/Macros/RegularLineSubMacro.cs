@@ -12,7 +12,7 @@ namespace Infohazard.StillTimeScript.Core.Parsers.Macros {
         }
 
         public IEnumerable<string> Expand(LineTokens callTokens) {
-            yield return _parameters.EvaluateMacroLine(callTokens, _macroLine);
+            yield return _parameters.EvaluateMacroLine(callTokens, _macroLine, new StsRange(0, _macroLine.Length));
         }
     }
 }

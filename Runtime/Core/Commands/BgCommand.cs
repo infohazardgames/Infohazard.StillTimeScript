@@ -10,12 +10,12 @@ namespace Infohazard.StillTimeScript.Core.Commands {
     public class BgCommand : Command, ISequentialCommand, IResourceCommand {
         public const string BuiltInVariableName = "__BuiltIn_BgCommand_Color";
 
-        public string ColorStr { get; }
-        public string TimeStr { get; }
+        public Token Color { get; }
+        public Token? Time { get; }
 
         public BgCommand(LineTokens tokens) : base(tokens) {
-            ColorStr = tokens.GetArg(0);
-            TimeStr = tokens.GetArg(1);
+            Color = tokens.GetRequiredArg(0);
+            Time = tokens.GetArg(1);
         }
 
         public void CreateResources(GraphData graphData) {
@@ -35,10 +35,10 @@ namespace Infohazard.StillTimeScript.Core.Commands {
         }
 
         public void ApplyToSequence(NodeSequenceBuilder builder, GraphData graphData) {
-            IExpression colorExpr = ExpressionParser.ParseExpression(this, graphData, ColorStr, StsValueType.Color);
-            IExpression timeExpr = string.IsNullOrEmpty(TimeStr)
-                ? null
-                : ExpressionParser.ParseExpression(this, graphData, TimeStr, StsValueType.Number);
+            IExpression colorExpr = ExpressionParser.ParseExpression(this, graphData, Line, Color.Range, StsValueType.Color);
+            IExpression timeExpr = Time.HasValue
+                ? ExpressionParser.ParseExpression(this, graphData, Line, Time.Value.Range)
+                : null;
 
             Variable variable = graphData.GetResource<Variable>(this, BuiltInVariableName);
             BgNode node = new(colorExpr, timeExpr, variable);

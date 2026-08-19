@@ -1,0 +1,15 @@
+<ui:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="True">
+    <Style src="project://database/Packages/com.infohazard.stilltimescript/Editor/ScriptEditor/StsEditorStyle.uss?fileID=7433441132597879392&amp;guid=2925d5e65eeedb64eb3db161a5cf027d&amp;type=3#StsEditorStyle"/>
+    <ui:VisualElement name="EditorRoot" focusable="true" tabindex="-1" style="flex-grow: 1;">
+        <uie:Toolbar tabindex="-1">
+            <uie:ToolbarMenu text="File"/>
+            <uie:ToolbarMenu text="Edit"/>
+        </uie:Toolbar>
+        <ui:VisualElement focusable="true" tabindex="-1" style="flex-grow: 1; flex-direction: row;">
+            <ui:VisualElement focusable="true" tabindex="-1" style="flex-grow: 1; flex-direction: row;">
+                <StillTime.Editor.ScriptEditor.StsEditorTextArea gui-skin="project://database/Packages/com.infohazard.stilltimescript/Editor/ScriptEditor/ScriptEditorGUISkin.guiskin?fileID=11400000&amp;guid=629cf03372a582d4fb09b0c5363257c7&amp;type=2#ScriptEditorGUISkin" placeholder-lines="&lt;noparse&gt;iLI&lt;b&gt;ne 1 of the scri&lt;/b&gt;pt&lt;/noparse&gt;,Mline 2,Mline 2,Mline 2,Mline 2,Mline 2,Mline 2,Mline 2,Mline 2,Mline 2,Mline 2" focusable="true" tabindex="-1"/>
+            </ui:VisualElement>
+            <ui:TreeView tabindex="-1" style="flex-grow: 0;"/>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

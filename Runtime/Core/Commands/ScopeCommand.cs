@@ -5,15 +5,15 @@ using Infohazard.StillTimeScript.Core.Utility;
 namespace Infohazard.StillTimeScript.Core.Commands {
     [AutoCommandParser("scope", 1)]
     public class ScopeCommand : Command, IResourceCommand {
-        public string Identifier { get; }
+        public Token Identifier { get; }
 
         public ScopeCommand(LineTokens tokens) : base(tokens) {
-            Identifier = tokens.GetArg(0);
+            Identifier = tokens.GetRequiredArg(0);
         }
 
         public void CreateResources(GraphData graphData) {
-            Scope scope = new(Identifier);
-            graphData.Resources.Add(Identifier, scope);
+            Scope scope = new(Identifier.Text);
+            graphData.Resources.Add(Identifier.Text, scope);
         }
     }
 }

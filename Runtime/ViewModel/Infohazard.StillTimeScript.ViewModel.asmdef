@@ -1,0 +1,17 @@
+{
+    "name": "Infohazard.StillTimeScript.ViewModel",
+    "rootNamespace": "Infohazard.StillTimeScript",
+    "references": [
+        "GUID:574362b15decf30448ab74b2ee336afb",
+        "GUID:f51ebe6a0ceec4240a699833d6309b23"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

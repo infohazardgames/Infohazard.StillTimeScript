@@ -5,28 +5,31 @@ using Infohazard.StillTimeScript.Core.Resource;
 using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Commands {
-    [AutoCommandParser("speaker", 1, 2, true)]
+    [AutoCommandParser("speaker", 2, 2, true)]
     public class SpeakerCommand : Command, IResourceCommand {
-        public string Name { get; }
-        public string ColorStr { get; }
-        public string TextExprStr { get; }
+        public Token Name { get; }
+        public Token ColorStr { get; }
+        public Token TextExprStr { get; }
 
         public SpeakerCommand(LineTokens tokens) : base(tokens) {
-            Name = tokens.GetArg(0);
-            ColorStr = tokens.GetArg(1);
-            TextExprStr = tokens.Text;
+            Name = tokens.GetRequiredArg(0);
+            ColorStr = tokens.GetRequiredArg(1);
+            TextExprStr = tokens.GetRequiredText();
         }
 
         public void CreateResources(GraphData graphData) {
-            Speaker speaker = new(Name);
-            graphData.Resources.Add(Name, speaker);
+            Speaker speaker = new(Name.Text);
+            graphData.Resources.Add(Name.Text, speaker);
         }
 
         public void ValidateResources(GraphData graphData) {
-            IExpression colorExpr = ExpressionParser.ParseExpression(this, graphData, ColorStr, StsValueType.Color);
-            IExpression textExpr = ExpressionParser.ParseStringExpression(this, graphData, TextExprStr);
+            IExpression colorExpr = ExpressionParser.ParseExpression(this, graphData, ColorStr.Text,
+                                                                     new StsRange(0, ColorStr.Text.Length),
+                                                                     StsValueType.Color);
+            IExpression textExpr = ExpressionParser.ParseStringExpression(this, graphData, TextExprStr.Text,
+                                                                          new StsRange(0, TextExprStr.Text.Length));
 
-            Speaker speaker = graphData.GetResource<Speaker>(this, Name);
+            Speaker speaker = graphData.GetResource<Speaker>(this, Name.Text);
             speaker.Color = colorExpr;
             speaker.Text = textExpr;
         }

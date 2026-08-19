@@ -59,6 +59,7 @@ namespace StillTime.Editor {
 
                 try {
                     ValidateScript(scriptPath);
+                    if (force) Debug.Log($"Script <color=green>{scriptPath}</color> validated clean.");
                 } catch (Exception ex) {
                     Debug.LogException(ex);
                 }

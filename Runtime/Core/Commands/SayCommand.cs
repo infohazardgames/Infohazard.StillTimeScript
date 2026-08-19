@@ -6,7 +6,7 @@ using Infohazard.StillTimeScript.Core.Utility;
 namespace Infohazard.StillTimeScript.Core.Commands {
     [AutoCommandParser("say", 0, 1, true)]
     public class SayCommand : TextCommand, ISequentialCommand {
-        public SayCommand(LineTokens tokens) : base(tokens, tokens.GetArg(0), tokens.Text) { }
+        public SayCommand(LineTokens tokens) : base(tokens, tokens.GetArg(0), tokens.GetRequiredText()) { }
 
         public void ApplyToSequence(NodeSequenceBuilder builder, GraphData graphData) {
             Speaker speaker = GetSpeaker(graphData);

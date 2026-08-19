@@ -6,14 +6,14 @@ using Infohazard.StillTimeScript.Core.Utility;
 namespace Infohazard.StillTimeScript.Core.Commands {
     [AutoCommandParser("reset", 1)]
     public class ResetScopeCommand : Command, ISequentialCommand {
-        public string Scope { get; }
+        public Token Scope { get; }
 
         public ResetScopeCommand(LineTokens tokens) : base(tokens) {
-            Scope = tokens.GetArg(0);
+            Scope = tokens.GetRequiredArg(0);
         }
 
         public void ApplyToSequence(NodeSequenceBuilder builder, GraphData graphData) {
-            Scope scope = graphData.GetResource<Scope>(this, Scope);
+            Scope scope = graphData.GetResource<Scope>(this, Scope.Text);
             ResetScopeNode node = new(scope);
             builder.Append(node);
         }
