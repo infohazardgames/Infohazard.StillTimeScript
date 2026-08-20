@@ -1,4 +1,5 @@
-﻿using Infohazard.StillTimeScript.Core.Utility;
+﻿using System.Collections.Generic;
+using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Commands.Interfaces {
     public interface ICommand {
@@ -7,5 +8,7 @@ namespace Infohazard.StillTimeScript.Core.Commands.Interfaces {
         public string Line { get; }
 
         public void GatherSubCommands(ref CommandGatheringState state);
+
+        public IEnumerable<CommandToken> EnumerateTokens();
     }
 }

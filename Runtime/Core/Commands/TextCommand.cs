@@ -1,4 +1,5 @@
-﻿using Infohazard.StillTimeScript.Core.Expressions;
+﻿using System.Collections.Generic;
+using Infohazard.StillTimeScript.Core.Expressions;
 using Infohazard.StillTimeScript.Core.Parsers;
 using Infohazard.StillTimeScript.Core.Resource;
 using Infohazard.StillTimeScript.Core.Utility;
@@ -26,6 +27,14 @@ namespace Infohazard.StillTimeScript.Core.Commands {
 
         protected IExpression GetTextExpression(GraphData graphData) {
             return ExpressionParser.ParseStringExpression(this, graphData, Line, TextExprStr.Range);
+        }
+
+        public override IEnumerable<CommandToken> EnumerateTokens() {
+            if (Speaker.HasValue) {
+                yield return new CommandToken(Speaker.Value, CommandTokenType.Expression, StsValueType.Resource);
+            }
+
+            yield return new CommandToken(TextExprStr, CommandTokenType.TextExpression);
         }
     }
 }

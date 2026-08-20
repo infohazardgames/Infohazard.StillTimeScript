@@ -1,4 +1,5 @@
-﻿using Infohazard.StillTimeScript.Core.Commands.Interfaces;
+﻿using System.Collections.Generic;
+using Infohazard.StillTimeScript.Core.Commands.Interfaces;
 using Infohazard.StillTimeScript.Core.Expressions;
 using Infohazard.StillTimeScript.Core.Parsers;
 using Infohazard.StillTimeScript.Core.Resource;
@@ -29,6 +30,12 @@ namespace Infohazard.StillTimeScript.Core.Commands {
                 ExpressionParser.ParseExpression(this, graphData, Line, TargetStr.Range, StsValueType.Node);
             interrupt.Condition = condition;
             interrupt.Target = target;
+        }
+
+        public override IEnumerable<CommandToken> EnumerateTokens() {
+            yield return new CommandToken(InterruptId, CommandTokenType.Definition);
+            yield return new CommandToken(TargetStr, CommandTokenType.Expression, StsValueType.Node);
+            yield return new CommandToken(ConditionStr, CommandTokenType.Expression);
         }
     }
 }

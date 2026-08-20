@@ -75,5 +75,9 @@ namespace Infohazard.StillTimeScript.Core.Commands {
                 return convergenceNode;
             }
         }
+
+        public override IEnumerable<CommandToken> EnumerateTokens() {
+            yield return new CommandToken(Condition, CommandTokenType.Expression);
+        }
     }
 }

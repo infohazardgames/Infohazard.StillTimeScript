@@ -37,5 +37,9 @@ namespace Infohazard.StillTimeScript.Core.Commands {
             CommandUtility.AssignIds(Identifier.Text, builder, graphData);
             emptyNode.Next = builder.FirstNode;
         }
+
+        public override IEnumerable<CommandToken> EnumerateTokens() {
+            yield return new CommandToken(Identifier, CommandTokenType.Definition);
+        }
     }
 }

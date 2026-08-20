@@ -1,4 +1,5 @@
-﻿using Infohazard.StillTimeScript.Core.Commands.Interfaces;
+﻿using System.Collections.Generic;
+using Infohazard.StillTimeScript.Core.Commands.Interfaces;
 using Infohazard.StillTimeScript.Core.Expressions;
 using Infohazard.StillTimeScript.Core.Nodes;
 using Infohazard.StillTimeScript.Core.Parsers;
@@ -21,6 +22,11 @@ namespace Infohazard.StillTimeScript.Core.Commands {
             IExpression expression = ExpressionParser.ParseExpression(this, graphData, Line, ValueStr.Range, variable.Type);
             SetVariableNode setVariableNode = new(variable, expression);
             builder.Append(setVariableNode);
+        }
+
+        public override IEnumerable<CommandToken> EnumerateTokens() {
+            yield return new CommandToken(VarName, CommandTokenType.Variable);
+            yield return new CommandToken(ValueStr, CommandTokenType.Expression);
         }
     }
 }

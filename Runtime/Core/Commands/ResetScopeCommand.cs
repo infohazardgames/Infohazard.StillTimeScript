@@ -1,4 +1,5 @@
-﻿using Infohazard.StillTimeScript.Core.Commands.Interfaces;
+﻿using System.Collections.Generic;
+using Infohazard.StillTimeScript.Core.Commands.Interfaces;
 using Infohazard.StillTimeScript.Core.Nodes;
 using Infohazard.StillTimeScript.Core.Resource;
 using Infohazard.StillTimeScript.Core.Utility;
@@ -16,6 +17,10 @@ namespace Infohazard.StillTimeScript.Core.Commands {
             Scope scope = graphData.GetResource<Scope>(this, Scope.Text);
             ResetScopeNode node = new(scope);
             builder.Append(node);
+        }
+
+        public override IEnumerable<CommandToken> EnumerateTokens() {
+            yield return new CommandToken(Scope, CommandTokenType.Expression, StsValueType.Resource);
         }
     }
 }

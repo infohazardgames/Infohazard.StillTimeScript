@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Infohazard.StillTimeScript.Core.Commands;
 using Infohazard.StillTimeScript.Core.Commands.Interfaces;
 using Infohazard.StillTimeScript.Core.Parsers.Macros;
 using Infohazard.StillTimeScript.Core.Utility;
@@ -64,7 +65,7 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             }
         }
 
-        public static void ParseLine(ParsingState state, List<ICommand> commands) {
+        public static void ParseLine(ParsingState state, List<ICommand> commands, bool expandMacros) {
             ParsingState.LineInfo line = state.CurrentLine;
 
             StsRange actualRange;
@@ -100,7 +101,12 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                                                $"Error occurred when constructing auto-parsed command:\n{ex}");
                 }
             } else if (state.Macros.TryGetValue(cmd, out Macro macro)) {
-                macro.ExpandCall(state);
+                if (expandMacros) {
+                    macro.ExpandCall(state);
+                } else {
+                    LineTokens tokens = Tokenizer.TokenizeAndAdvance(state);
+                    commands.Add(new MacroCallPlaceholder(tokens));
+                }
             } else {
                 throw new ParsingException(state.LineNumber, line.Line, $"No parser or macro found for command '{cmd}'");
             }

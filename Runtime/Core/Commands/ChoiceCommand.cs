@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using Infohazard.StillTimeScript.Core.Commands.Interfaces;
 using Infohazard.StillTimeScript.Core.Expressions;
 using Infohazard.StillTimeScript.Core.Nodes;
@@ -26,6 +27,18 @@ namespace Infohazard.StillTimeScript.Core.Commands {
             Choice choice = new(GetTextExpression(graphData), targetExpr, condExpr);
 
             options.Add(choice);
+        }
+
+        public override IEnumerable<CommandToken> EnumerateTokens() {
+            foreach (CommandToken token in base.EnumerateTokens()) {
+                yield return token;
+            }
+
+            yield return new CommandToken(TargetStr, CommandTokenType.Expression, StsValueType.Node);
+
+            if (ConditionStr != null) {
+                yield return new CommandToken(ConditionStr.Value, CommandTokenType.Expression);
+            }
         }
     }
 }

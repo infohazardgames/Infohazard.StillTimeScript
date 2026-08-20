@@ -1,4 +1,5 @@
-﻿using Infohazard.StillTimeScript.Core.Commands.Interfaces;
+﻿using System.Collections.Generic;
+using Infohazard.StillTimeScript.Core.Commands.Interfaces;
 using Infohazard.StillTimeScript.Core.Expressions;
 using Infohazard.StillTimeScript.Core.Nodes;
 using Infohazard.StillTimeScript.Core.Parsers;
@@ -43,6 +44,14 @@ namespace Infohazard.StillTimeScript.Core.Commands {
             Variable variable = graphData.GetResource<Variable>(this, BuiltInVariableName);
             BgNode node = new(colorExpr, timeExpr, variable);
             builder.Append(node);
+        }
+
+        public override IEnumerable<CommandToken> EnumerateTokens() {
+            yield return new CommandToken(Color, CommandTokenType.Expression, StsValueType.Color);
+            
+            if (Time.HasValue) {
+                yield return new CommandToken(Time.Value, CommandTokenType.Expression, StsValueType.Number);
+            }
         }
     }
 }

@@ -2,6 +2,6 @@
 
 namespace Infohazard.StillTimeScript.ViewModel.Annotations {
     public class StringAnnotation : LineAnnotation {
-        public StringAnnotation(int lineNumber, StsRange range) : base(lineNumber, range) { }
+        public StringAnnotation(StsRange range) : base(range) { }
     }
 }

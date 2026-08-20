@@ -10,7 +10,7 @@ namespace Infohazard.StillTimeScript.Core.Utility {
             ParsingState state = new(lines, 0);
 
             while (!state.IsEnded) {
-                CommandParserDelegator.ParseLine(state, commands);
+                CommandParserDelegator.ParseLine(state, commands, true);
             }
 
             return commands;

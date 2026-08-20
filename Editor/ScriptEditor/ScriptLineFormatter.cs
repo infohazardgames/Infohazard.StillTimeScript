@@ -11,13 +11,15 @@ namespace StillTime.Editor.ScriptEditor {
     public static class ScriptLineFormatter {
         private static readonly StringBuilder StringBuilder = new();
 
-        private static readonly Color CommentColor = new(0.5f, 0.7f, 0.5f);
+        private static readonly Color CommentColor = new(0.6f, 1.0f, 0.6f);
 
-        private static readonly Color ErrorColor = new(0.6f, 0.0f, 0.0f);
+        private static readonly Color DefinitionColor = new(0.1f, 0.7f, 0.1f);
+
+        private static readonly Color ErrorColor = new(1.0f, 0.1f, 0.1f);
 
         private static readonly Color KeywordColor = new(0.5f, 0.5f, 1.0f);
 
-        private static readonly Color StringColor = new(0.8f, 0.6f, 0.2f);
+        private static readonly Color StringColor = new(0.9f, 0.8f, 0.2f);
 
         public static string FormatLine(StsDocumentViewModel viewModel, int index) {
             StringBuilder.Clear();
@@ -53,6 +55,14 @@ namespace StillTime.Editor.ScriptEditor {
             switch (annotation) {
                 case CommentAnnotation:
                     AppendColoredText(text, CommentColor);
+                    break;
+                case DefinitionAnnotation:
+                    AppendColoredText(text, DefinitionColor);
+                    break;
+                case DefinitionReferenceAnnotation:
+                    StringBuilder.Append("<u>");
+                    AppendColoredText(text, DefinitionColor);
+                    StringBuilder.Append("</u>");
                     break;
                 case ErrorAnnotation:
                     AppendColoredText(text, ErrorColor);

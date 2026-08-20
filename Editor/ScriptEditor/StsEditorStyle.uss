@@ -1,3 +1,3 @@
-.HoverText {
+.text-area--hover {
     cursor: text;
 }

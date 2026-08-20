@@ -12,7 +12,7 @@ using UnityEngine.UIElements;
 namespace StillTime.Editor.ScriptEditor {
     [UxmlElement]
     public partial class StsEditorTextArea : VisualElement {
-        private const string TextAreaCursorClassName = "HoverText";
+        private const string TextAreaCursorClassName = "text-area--hover";
         private const int LineNumberWidth = 50;
         private const int LineHeight = 20;
         private const string Indent = "    ";

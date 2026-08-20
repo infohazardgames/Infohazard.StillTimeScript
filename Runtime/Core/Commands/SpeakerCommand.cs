@@ -1,4 +1,5 @@
-﻿using Infohazard.StillTimeScript.Core.Commands.Interfaces;
+﻿using System.Collections.Generic;
+using Infohazard.StillTimeScript.Core.Commands.Interfaces;
 using Infohazard.StillTimeScript.Core.Expressions;
 using Infohazard.StillTimeScript.Core.Parsers;
 using Infohazard.StillTimeScript.Core.Resource;
@@ -32,6 +33,12 @@ namespace Infohazard.StillTimeScript.Core.Commands {
             Speaker speaker = graphData.GetResource<Speaker>(this, Name.Text);
             speaker.Color = colorExpr;
             speaker.Text = textExpr;
+        }
+
+        public override IEnumerable<CommandToken> EnumerateTokens() {
+            yield return new CommandToken(Name, CommandTokenType.Definition);
+            yield return new CommandToken(ColorStr, CommandTokenType.Expression, StsValueType.Color);
+            yield return new CommandToken(TextExprStr, CommandTokenType.TextExpression);
         }
     }
 }

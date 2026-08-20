@@ -1,4 +1,5 @@
-﻿using Infohazard.StillTimeScript.Core.Commands.Interfaces;
+﻿using System.Collections.Generic;
+using Infohazard.StillTimeScript.Core.Commands.Interfaces;
 using Infohazard.StillTimeScript.Core.Expressions;
 using Infohazard.StillTimeScript.Core.Nodes;
 using Infohazard.StillTimeScript.Core.Parsers;
@@ -17,6 +18,10 @@ namespace Infohazard.StillTimeScript.Core.Commands {
             IExpression timeExpr =
                 ExpressionParser.ParseExpression(this, graphData, Line, TimeStr.Range, StsValueType.Number);
             builder.Append(new DelayNode(timeExpr));
+        }
+
+        public override IEnumerable<CommandToken> EnumerateTokens() {
+            yield return new CommandToken(TimeStr, CommandTokenType.Expression, StsValueType.Number);
         }
     }
 }

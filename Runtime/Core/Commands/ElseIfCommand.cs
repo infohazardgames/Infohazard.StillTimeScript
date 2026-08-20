@@ -15,5 +15,9 @@ namespace Infohazard.StillTimeScript.Core.Commands {
         public override void GatherSubCommands(ref CommandGatheringState state) {
             CommandUtility.GatherSubCommands(this, ref state, Commands, false, true);
         }
+
+        public override IEnumerable<CommandToken> EnumerateTokens() {
+            yield return new CommandToken(Condition, CommandTokenType.Expression);
+        }
     }
 }

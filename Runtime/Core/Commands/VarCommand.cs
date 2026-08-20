@@ -1,4 +1,5 @@
-﻿using Infohazard.StillTimeScript.Core.Commands.Interfaces;
+﻿using System.Collections.Generic;
+using Infohazard.StillTimeScript.Core.Commands.Interfaces;
 using Infohazard.StillTimeScript.Core.Resource;
 using Infohazard.StillTimeScript.Core.Utility;
 
@@ -42,6 +43,15 @@ namespace Infohazard.StillTimeScript.Core.Commands {
 
         public void ValidateResources(GraphData graphData) {
             _ = graphData.GetResource<Scope>(this, Scope.Text);
+        }
+
+        public override IEnumerable<CommandToken> EnumerateTokens() {
+            yield return new CommandToken(TypeToken, CommandTokenType.Keyword);
+            yield return new CommandToken(Name, CommandTokenType.Definition);
+            yield return new CommandToken(Scope, CommandTokenType.Expression, StsValueType.Resource);
+            if (DefaultValue != null) {
+                yield return new CommandToken(DefaultValue.Value, CommandTokenType.Expression);
+            }
         }
     }
 }
