@@ -34,7 +34,7 @@ namespace Infohazard.StillTimeScript.Core.Commands {
                 yield return new CommandToken(Speaker.Value, CommandTokenType.Expression, StsValueType.Resource);
             }
 
-            yield return new CommandToken(TextExprStr, CommandTokenType.TextExpression);
+            yield return new CommandToken(TextExprStr, CommandTokenType.StringExpression);
         }
     }
 }

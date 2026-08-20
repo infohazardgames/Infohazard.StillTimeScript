@@ -32,7 +32,7 @@ namespace Infohazard.StillTimeScript.Core.Commands {
         }
 
         public override IEnumerable<CommandToken> EnumerateTokens() {
-            yield return new CommandToken(VarName, CommandTokenType.Variable, StsValueType.Number);
+            yield return new CommandToken(VarName, CommandTokenType.ResourceReference, StsValueType.Number);
             yield return new CommandToken(ValueStr, CommandTokenType.Expression, StsValueType.Number);
         }
     }

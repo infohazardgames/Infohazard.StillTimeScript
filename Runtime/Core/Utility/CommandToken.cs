@@ -13,10 +13,13 @@
 
     public enum CommandTokenType {
         Expression,
-        Variable,
-        TextExpression,
         Definition,
         Keyword,
         MacroCall,
+        StringExpression,
+        ResourceReference,
+        NodeReference,
+        ColorLiteral,
+        StringLiteral,
     }
 }

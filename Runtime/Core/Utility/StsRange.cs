@@ -43,6 +43,10 @@ namespace Infohazard.StillTimeScript.Core.Utility {
             return new StsRange(offset, length);
         }
 
+        public static implicit operator Range(StsRange range) {
+            return new Range(range.Start, range.End);
+        }
+
         public StsRange Trim(ReadOnlySpan<char> text) {
             int start = Start;
             int end = End;

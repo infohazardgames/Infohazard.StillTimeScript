@@ -24,11 +24,10 @@ namespace Infohazard.StillTimeScript.Core.Commands {
         }
 
         public void ValidateResources(GraphData graphData) {
-            IExpression colorExpr = ExpressionParser.ParseExpression(this, graphData, ColorStr.Text,
-                                                                     new StsRange(0, ColorStr.Text.Length),
-                                                                     StsValueType.Color);
-            IExpression textExpr = ExpressionParser.ParseStringExpression(this, graphData, TextExprStr.Text,
-                                                                          new StsRange(0, TextExprStr.Text.Length));
+            IExpression colorExpr =
+                ExpressionParser.ParseExpression(this, graphData, Line, ColorStr.Range, StsValueType.Color);
+            IExpression textExpr =
+                ExpressionParser.ParseStringExpression(this, graphData, Line, TextExprStr.Range);
 
             Speaker speaker = graphData.GetResource<Speaker>(this, Name.Text);
             speaker.Color = colorExpr;
@@ -38,7 +37,7 @@ namespace Infohazard.StillTimeScript.Core.Commands {
         public override IEnumerable<CommandToken> EnumerateTokens() {
             yield return new CommandToken(Name, CommandTokenType.Definition);
             yield return new CommandToken(ColorStr, CommandTokenType.Expression, StsValueType.Color);
-            yield return new CommandToken(TextExprStr, CommandTokenType.TextExpression);
+            yield return new CommandToken(TextExprStr, CommandTokenType.StringExpression);
         }
     }
 }

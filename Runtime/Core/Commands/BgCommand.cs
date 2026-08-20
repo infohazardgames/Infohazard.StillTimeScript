@@ -36,7 +36,8 @@ namespace Infohazard.StillTimeScript.Core.Commands {
         }
 
         public void ApplyToSequence(NodeSequenceBuilder builder, GraphData graphData) {
-            IExpression colorExpr = ExpressionParser.ParseExpression(this, graphData, Line, Color.Range, StsValueType.Color);
+            IExpression colorExpr =
+                ExpressionParser.ParseExpression(this, graphData, Line, Color.Range, StsValueType.Color);
             IExpression timeExpr = Time.HasValue
                 ? ExpressionParser.ParseExpression(this, graphData, Line, Time.Value.Range)
                 : null;
@@ -48,7 +49,7 @@ namespace Infohazard.StillTimeScript.Core.Commands {
 
         public override IEnumerable<CommandToken> EnumerateTokens() {
             yield return new CommandToken(Color, CommandTokenType.Expression, StsValueType.Color);
-            
+
             if (Time.HasValue) {
                 yield return new CommandToken(Time.Value, CommandTokenType.Expression, StsValueType.Number);
             }

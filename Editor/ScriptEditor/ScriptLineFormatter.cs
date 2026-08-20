@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Infohazard.StillTimeScript.Core.Utility;
 using Infohazard.StillTimeScript.ViewModel;
 using Infohazard.StillTimeScript.ViewModel.Annotations;
 using UnityEngine;
@@ -53,6 +54,10 @@ namespace StillTime.Editor.ScriptEditor {
 
         private static void HandleAnnotation(LineAnnotation annotation, ReadOnlySpan<char> text) {
             switch (annotation) {
+                case ColorLiteralAnnotation colorLiteralAnnotation:
+                    StsColor c = colorLiteralAnnotation.Color;
+                    AppendColoredText(text, new Color(c.R, c.G, c.B, c.A));
+                    break;
                 case CommentAnnotation:
                     AppendColoredText(text, CommentColor);
                     break;

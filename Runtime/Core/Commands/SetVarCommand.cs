@@ -25,7 +25,7 @@ namespace Infohazard.StillTimeScript.Core.Commands {
         }
 
         public override IEnumerable<CommandToken> EnumerateTokens() {
-            yield return new CommandToken(VarName, CommandTokenType.Variable);
+            yield return new CommandToken(VarName, CommandTokenType.ResourceReference);
             yield return new CommandToken(ValueStr, CommandTokenType.Expression);
         }
     }
