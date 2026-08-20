@@ -29,7 +29,7 @@ namespace Infohazard.StillTimeScript.ViewModel {
                 List<LineAnnotation> lineAnnotations = annotations[lineNumber] ??= new List<LineAnnotation>();
 
                 StsRange actualRange =
-                    Tokenizer.GetActualRangeFromLine(line, new StsRange(0, line.Length), out StsRange? commentRange);
+                    Tokenizer.GetActualRangeFromLine(line, lineInfo.RangeInLine, out StsRange? commentRange);
 
                 if (commentRange.HasValue) {
                     lineAnnotations.Add(new CommentAnnotation(commentRange.Value));
