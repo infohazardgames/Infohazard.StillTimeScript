@@ -1,4 +1,5 @@
-﻿using Infohazard.StillTimeScript.Core.Utility;
+﻿using System.Collections.Generic;
+using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Commands.Interfaces {
     public interface IResourceCommand : ICommand {

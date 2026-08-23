@@ -97,8 +97,10 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                 if (match.Index - curIndex > 0) {
                     string strLit = EscapeString(command, line[curIndex..match.Index]);
                     expression.AddExpression(new ConstantExpression(new StsValue(strLit)));
-                    tokens?.Add(new CommandToken(new Token(new StsRange(curIndex, match.Index - curIndex), strLit),
-                                                 CommandTokenType.StringLiteral));
+                    tokens?.Add(
+                        new CommandToken(
+                            new Token(command.LineNumber, new StsRange(curIndex, match.Index - curIndex), strLit),
+                            CommandTokenType.StringLiteral));
                 }
 
                 Group? group = match.Groups.Count > 1 ? match.Groups[1] : null;
@@ -115,8 +117,10 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             if (curIndex < range.End) {
                 string strLit = EscapeString(command, line[curIndex..range.End]);
                 expression.AddExpression(new ConstantExpression(new StsValue(strLit)));
-                tokens?.Add(new CommandToken(new Token(new StsRange(curIndex, range.End - curIndex), strLit),
-                                              CommandTokenType.StringLiteral));
+                tokens?.Add(
+                    new CommandToken(
+                        new Token(command.LineNumber, new StsRange(curIndex, range.End - curIndex), strLit),
+                        CommandTokenType.StringLiteral));
             }
 
             return expression;
@@ -305,9 +309,9 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
 
             if (c == '"') {
                 int strEnd = Tokenizer.GetEndOfStringLiteral(command.LineNumber, line, index, end);
-                tokens?.Add(new CommandToken(new Token(new StsRange(index, 1), "\""),
+                tokens?.Add(new CommandToken(new Token(command.LineNumber, new StsRange(index, 1), "\""),
                                              CommandTokenType.StringLiteral));
-                tokens?.Add(new CommandToken(new Token(new StsRange(strEnd - 1, 1), "\""),
+                tokens?.Add(new CommandToken(new Token(command.LineNumber, new StsRange(strEnd - 1, 1), "\""),
                                              CommandTokenType.StringLiteral));
                 IExpression strEx =
                     ParseStringExpression(command, graphData, line, StsRange.FromStartEnd(index + 1, strEnd - 1),
@@ -354,7 +358,8 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                         arguments.Count > 2 ? arguments[2] : null);
                 }
 
-                tokens?.Add(new CommandToken(Token.FromRangeInSource(funcOpRange, line), CommandTokenType.Keyword));
+                tokens?.Add(new CommandToken(Token.FromRangeInSource(command.LineNumber, funcOpRange, line),
+                                             CommandTokenType.Keyword));
             }
 
             int i;
@@ -375,25 +380,29 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             ReadOnlySpan<char> span = line.AsSpan(range.Start, range.Length);
 
             if (span.StartsWith("#") && StsColor.TryParseHex(span, out StsColor color)) {
-                tokens?.Add(new CommandToken(Token.FromRangeInSource(range, line), CommandTokenType.ColorLiteral));
+                tokens?.Add(new CommandToken(Token.FromRangeInSource(command.LineNumber, range, line),
+                                             CommandTokenType.ColorLiteral));
                 return new ConstantExpression(new StsValue(color));
             } else if (decimal.TryParse(span, out decimal num)) {
                 return new ConstantExpression(new StsValue(num));
             } else if (bool.TryParse(span, out bool b)) {
-                tokens?.Add(new CommandToken(Token.FromRangeInSource(range, line), CommandTokenType.Keyword));
+                tokens?.Add(new CommandToken(Token.FromRangeInSource(command.LineNumber, range, line),
+                                             CommandTokenType.Keyword));
                 return new ConstantExpression(new StsValue(b));
             }
 
             string itemStr = span.ToString();
             if (graphData.Resources.TryGetValue(itemStr, out Resource.Resource resource)) {
-                tokens?.Add(new CommandToken(Token.FromRangeInSource(range, line), CommandTokenType.ResourceReference));
+                tokens?.Add(new CommandToken(Token.FromRangeInSource(command.LineNumber, range, line),
+                                             CommandTokenType.ResourceReference));
                 if (resource is Variable variable) {
                     return new VariableExpression(variable);
                 } else {
                     return new ConstantExpression(new StsValue(resource));
                 }
             } else if (graphData.Nodes.TryGetValue(itemStr, out INode node)) {
-                tokens?.Add(new CommandToken(Token.FromRangeInSource(range, line), CommandTokenType.NodeReference));
+                tokens?.Add(new CommandToken(Token.FromRangeInSource(command.LineNumber, range, line),
+                                             CommandTokenType.NodeReference));
                 return new ConstantExpression(new StsValue(node));
             } else {
                 throw new ParsingException(command.LineNumber, command.Line,

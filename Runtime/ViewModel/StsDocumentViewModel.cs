@@ -2,8 +2,11 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 using Infohazard.StillTimeScript.Core.Utility;
 using Infohazard.StillTimeScript.ViewModel.Annotations;
+using Infohazard.StillTimeScript.ViewModel.Data;
 using UnityEngine;
 
 namespace Infohazard.StillTimeScript.ViewModel {
@@ -12,11 +15,12 @@ namespace Infohazard.StillTimeScript.ViewModel {
         private List<List<LineAnnotation>?>? _annotations;
         private bool _needsToUpdateAnnotations;
         private int _deferralCount;
-        private Vector2Int? _cursorPosition;
-        private Vector2Int? _selectionStart;
-        private Vector2Int? _selectionEnd;
-        private int _rememberedCursorX;
+        private StsCursorPos? _cursorPosition;
+        private StsCursorRange? _selection;
+        private int _rememberedCursorColumn;
         private float _scrollValue;
+
+        private static readonly string[] LineSeparators = { "\r\n", "\n", "\r" };
 
         public IReadOnlyList<string> ScriptLines => _scriptLines;
 
@@ -24,79 +28,61 @@ namespace Infohazard.StillTimeScript.ViewModel {
 
         public bool CursorActive { get; private set; }
 
-        public Vector2Int CursorPosition {
-            get => _cursorPosition ?? Vector2Int.zero;
+        public StsCursorPos CursorPosition {
+            get => _cursorPosition ?? StsCursorPos.Zero;
             set {
-                if (value.x < 0 || value.y < 0 || value.y >= _scriptLines.Count) {
+                if (value.Column < 0 || value.Line < 0 || value.Line >= _scriptLines.Count) {
                     throw new ArgumentOutOfRangeException(nameof(value));
                 }
 
                 if (_cursorPosition == value) return;
-                _rememberedCursorX = value.x;
-                _cursorPosition = new Vector2Int(Math.Min(value.x, _scriptLines[value.y].Length), value.y);
+                _rememberedCursorColumn = value.Column;
+                _cursorPosition = new StsCursorPos(value.Line, Math.Min(value.Column, _scriptLines[value.Line].Length));
                 CursorActive = true;
                 CursorChanged?.Invoke(CursorPosition);
             }
         }
 
-        public int CursorX {
-            get => _cursorPosition?.x ?? 0;
-            set => CursorPosition = new Vector2Int(value, CursorPosition.y);
+        public int CursorLine {
+            get => _cursorPosition?.Line ?? 0;
+            set => CursorPosition = new StsCursorPos(value, _rememberedCursorColumn);
         }
 
-        public int CursorY {
-            get => _cursorPosition?.y ?? 0;
-            set => CursorPosition = new Vector2Int(_rememberedCursorX, value);
+        public int CursorColumn {
+            get => _cursorPosition?.Column ?? 0;
+            set => CursorPosition = new StsCursorPos(CursorPosition.Line, value);
         }
 
         public bool SelectionActive { get; private set; }
 
-        public Vector2Int SelectionStart {
-            get => _selectionStart ?? Vector2Int.zero;
+        public StsCursorPos SelectionStart {
+            get => _selection?.Start ?? StsCursorPos.Zero;
+            set => Selection = new StsCursorRange(value, SelectionEnd);
+        }
+
+        public StsCursorPos SelectionEnd {
+            get => _selection?.End ?? StsCursorPos.Zero;
+            set => Selection = new StsCursorRange(SelectionStart, value);
+        }
+
+        public StsCursorRange Selection {
+            get => _selection ?? StsCursorRange.Empty;
             set {
-                if (!IsValidCursorPosition(value)) {
+                if (!IsValidCursorPosition(value.Start) || !IsValidCursorPosition(value.End)) {
                     throw new ArgumentOutOfRangeException(nameof(value));
                 }
 
-                if (_selectionStart == value) return;
-                _selectionStart = value;
-                _selectionEnd ??= value;
+                if (value == _selection) return;
+
+                _selection = value;
                 SelectionActive = true;
-                SelectionChanged?.Invoke(_selectionStart.Value, _selectionEnd.Value);
+                SelectionChanged?.Invoke(value);
             }
         }
 
-        public Vector2Int SelectionEnd {
-            get => _selectionEnd ?? Vector2Int.zero;
-            set {
-                if (!IsValidCursorPosition(value)) {
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                }
-
-                if (_selectionEnd == value) return;
-                _selectionEnd = value;
-                _selectionStart ??= value;
-                SelectionActive = true;
-                SelectionChanged?.Invoke(_selectionStart.Value, _selectionEnd.Value);
-            }
-        }
-
-        public bool SelectionReverse {
-            get {
-                if (!_selectionStart.HasValue || !_selectionEnd.HasValue) return false;
-
-                return SelectionStart.y == SelectionEnd.y
-                    ? SelectionStart.x > SelectionEnd.x
-                    : SelectionStart.y > SelectionEnd.y;
-            }
-        }
-
-        public Vector2Int SelectionMin => SelectionReverse ? SelectionEnd : SelectionStart;
-        public Vector2Int SelectionMax => SelectionReverse ? SelectionStart : SelectionEnd;
-
-        public Vector2Int EndPosition => ScriptLines.Count == 0
-            ? Vector2Int.zero
-            : new Vector2Int(ScriptLines[^1].Length, ScriptLines.Count - 1);
+        public StsCursorPos EndPosition => ScriptLines.Count == 0
+            ? StsCursorPos.Zero
+            : new StsCursorPos(ScriptLines.Count - 1, ScriptLines[^1].Length);
 
         public float ScrollValue {
             get => _scrollValue;
@@ -111,8 +97,8 @@ namespace Infohazard.StillTimeScript.ViewModel {
         public event Action<StsRange>? LinesInserted;
         public event Action<StsRange>? LinesRemoved;
         public event Action<StsRange>? LinesModified;
-        public event Action<Vector2Int, Vector2Int>? SelectionChanged;
-        public event Action<Vector2Int>? CursorChanged;
+        public event Action<StsCursorRange>? SelectionChanged;
+        public event Action<StsCursorPos>? CursorChanged;
         public event Action<float>? ScrollChanged;
 
         public StsDocumentViewModel(IEnumerable<string> scriptLines) {
@@ -136,32 +122,32 @@ namespace Infohazard.StillTimeScript.ViewModel {
             IsModifiedChanged?.Invoke(true);
         }
 
-        public void DeleteText(Vector2Int minPosition, Vector2Int maxPosition) {
-            if (minPosition.y < 0 || minPosition.y >= _scriptLines.Count ||
-                maxPosition.y < 0 || maxPosition.y > _scriptLines.Count)
+        public void DeleteText(StsCursorRange range) {
+            StsCursorPos min = range.Min;
+            StsCursorPos max = range.Max;
+
+            if (min.Line < 0 || min.Line >= _scriptLines.Count ||
+                max.Line < 0 || max.Line > _scriptLines.Count)
                 return;
 
-            if (minPosition.x < 0 || minPosition.x > _scriptLines[minPosition.y].Length ||
-                maxPosition.x < 0 || maxPosition.x > _scriptLines[maxPosition.y].Length)
+            if (min.Column < 0 || min.Column > _scriptLines[min.Line].Length ||
+                max.Column < 0 || max.Column > _scriptLines[max.Line].Length)
                 return;
 
-            if (minPosition.y > maxPosition.y || (minPosition.y == maxPosition.y && minPosition.x >= maxPosition.x))
-                return;
-
-            string keptContentOnFirstLine = _scriptLines[minPosition.y][..minPosition.x];
-            string keptContentOnLastLine = maxPosition.y < _scriptLines.Count
-                ? _scriptLines[maxPosition.y][maxPosition.x..]
+            string keptContentOnFirstLine = _scriptLines[min.Line][..min.Column];
+            string keptContentOnLastLine = max.Line < _scriptLines.Count
+                ? _scriptLines[max.Line][max.Column..]
                 : string.Empty;
 
-            if (maxPosition.y > minPosition.y) {
-                _scriptLines.RemoveRange(minPosition.y + 1, maxPosition.y - minPosition.y);
-                _annotations?.RemoveRange(minPosition.y + 1, maxPosition.y - minPosition.y);
-                LinesRemoved?.Invoke(new StsRange(minPosition.y + 1, maxPosition.y - minPosition.y));
+            if (max.Line > min.Line) {
+                _scriptLines.RemoveRange(min.Line + 1, max.Line - min.Line);
+                _annotations?.RemoveRange(min.Line + 1, max.Line - min.Line);
+                LinesRemoved?.Invoke(new StsRange(min.Line + 1, max.Line - min.Line));
             }
 
-            _scriptLines[minPosition.y] = keptContentOnFirstLine + keptContentOnLastLine;
-            if (_annotations != null) _annotations[minPosition.y] = null;
-            LinesModified?.Invoke(new StsRange(minPosition.y, 1));
+            _scriptLines[min.Line] = keptContentOnFirstLine + keptContentOnLastLine;
+            if (_annotations != null) _annotations[min.Line] = null;
+            LinesModified?.Invoke(new StsRange(min.Line, 1));
 
             IsModified = true;
             IsModifiedChanged?.Invoke(IsModified);
@@ -169,48 +155,39 @@ namespace Infohazard.StillTimeScript.ViewModel {
             UpdateAnnotations();
         }
 
-        public void InsertNewLine(Vector2Int position) {
-            if (position.y < 0 || position.y >= _scriptLines.Count)
-                return;
+        public StsCursorPos InsertText(StsCursorPos position, string text) {
+            string beforeCursor = _scriptLines[position.Line][..position.Column];
+            string afterCursor = _scriptLines[position.Line][position.Column..];
 
-            if (position.x < 0 || position.x > _scriptLines[position.y].Length)
-                return;
+            string[] linesToInsert = text.Split(LineSeparators, StringSplitOptions.None);
 
-            string curLine = _scriptLines[position.y][..position.x];
-            string nextLine = _scriptLines[position.y][position.x..];
+            int endY = position.Line + linesToInsert.Length;
+            int lastY = endY - 1;
 
-            _scriptLines[position.y] = curLine;
-            if (_annotations != null) _annotations[position.y] = null;
-            LinesModified?.Invoke(new StsRange(position.y, 1));
+            _scriptLines[position.Line] = beforeCursor + linesToInsert[0];
+            _scriptLines.InsertRange(position.Line + 1, linesToInsert[1..]);
+            StsCursorPos insertEnd = new(lastY, _scriptLines[lastY].Length);
+            _scriptLines[lastY] += afterCursor;
 
-            _scriptLines.Insert(position.y + 1, nextLine);
-            _annotations?.Insert(position.y + 1, null);
-            LinesInserted?.Invoke(new StsRange(position.y + 1, 1));
+            if (_annotations != null) {
+                _annotations[position.Line] = null;
+                if (linesToInsert.Length > 1) {
+                    _annotations.InsertRange(
+                        position.Line + 1, Enumerable.Repeat<List<LineAnnotation>?>(null, linesToInsert.Length - 1));
+                }
+            }
 
-            IsModified = true;
-            IsModifiedChanged?.Invoke(IsModified);
-
-            UpdateAnnotations();
-        }
-
-        public void InsertText(Vector2Int position, string text) {
-            if (position.y < 0 || position.y >= _scriptLines.Count)
-                return;
-
-            if (position.x < 0 || position.x > _scriptLines[position.y].Length)
-                return;
-
-            string beforeCursor = _scriptLines[position.y][..position.x];
-            string afterCursor = _scriptLines[position.y][position.x..];
-
-            _scriptLines[position.y] = beforeCursor + text + afterCursor;
-            if (_annotations != null) _annotations[position.y] = null;
-            LinesModified?.Invoke(new StsRange(position.y, 1));
+            LinesModified?.Invoke(new StsRange(position.Line, 1));
+            if (endY > position.Line) {
+                LinesInserted?.Invoke(StsRange.FromStartEnd(position.Line + 1, endY + 1));
+            }
 
             IsModified = true;
             IsModifiedChanged?.Invoke(IsModified);
 
             UpdateAnnotations();
+
+            return insertEnd;
         }
 
         public void ClearModified() {
@@ -240,35 +217,41 @@ namespace Infohazard.StillTimeScript.ViewModel {
             return new EventDeferral(this);
         }
 
-        public void SetSelectionRange(Vector2Int start, Vector2Int end) {
-            if (!IsValidCursorPosition(start)) {
-                throw new ArgumentOutOfRangeException(nameof(start));
-            }
-
-            if (!IsValidCursorPosition(end)) {
-                throw new ArgumentOutOfRangeException(nameof(end));
-            }
-
-            if (_selectionStart == start && _selectionEnd == end) return;
-
-            _selectionStart = start;
-            _selectionEnd = end;
-            SelectionActive = true;
-            SelectionChanged?.Invoke(_selectionStart.Value, _selectionEnd.Value);
-        }
-
         public void ClearSelection() {
-            _selectionStart = null;
-            _selectionEnd = null;
+            _selection = null;
             SelectionActive = false;
-            SelectionChanged?.Invoke(Vector2Int.zero, Vector2Int.zero);
+            SelectionChanged?.Invoke(StsCursorRange.Empty);
         }
 
-        private bool IsValidCursorPosition(Vector2Int value) {
-            return value.y >= 0 &&
-                   value.y < _scriptLines.Count &&
-                   value.x >= 0 &&
-                   value.x <= _scriptLines[value.y].Length;
+        private bool IsValidCursorPosition(StsCursorPos value) {
+            return value.Line >= 0 &&
+                   value.Line < _scriptLines.Count &&
+                   value.Column >= 0 &&
+                   value.Column <= _scriptLines[value.Line].Length;
+        }
+
+        public string? GetSelectedText() {
+            return GetText(Selection);
+        }
+
+        public string? GetText(StsCursorRange range) {
+            if (!SelectionActive) return null;
+
+            StsCursorPos min = range.Min;
+            StsCursorPos max = range.Max;
+
+            if (min.Line == max.Line) {
+                return _scriptLines[min.Line][min.Column..max.Column];
+            }
+
+            StringBuilder builder = new();
+            builder.Append(_scriptLines[min.Line][min.Column..]).Append("\n");
+            for (int i = min.Line + 1; i < max.Line; i++) {
+                builder.Append(_scriptLines[i]).Append("\n");
+            }
+
+            builder.Append(_scriptLines[max.Line][..max.Column]);
+            return builder.ToString();
         }
 
         public readonly struct EventDeferral : IDisposable {

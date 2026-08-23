@@ -49,7 +49,7 @@ namespace Infohazard.StillTimeScript.Core.Utility {
                 throw new ParsingException(lineNumber, line, "Failed to parse command name");
             }
 
-            Token cmd = Token.FromRangeInSource(actualRange.Start..cmdEnd, line);
+            Token cmd = Token.FromRangeInSource(lineNumber, actualRange.Start..cmdEnd, line);
             Token[] args = null;
 
             StsRange remaining = StsRange.FromStartEnd(cmdEnd, actualRange.End).Trim(line);
@@ -75,7 +75,7 @@ namespace Infohazard.StillTimeScript.Core.Utility {
             }
 
             remaining.Min++;
-            Token text = ReadTextToEnd(line, remaining, out isTextContinued);
+            Token text = ReadTextToEnd(lineNumber, line, remaining, out isTextContinued);
             return new LineTokens(lineNumber, line, cmd, args, text);
         }
 
@@ -93,7 +93,7 @@ namespace Infohazard.StillTimeScript.Core.Utility {
                 throw new ParsingException(lineNumber, line, "Failed to tokenize command name");
             }
 
-            return Token.FromRangeInSource(actualRange.Start..cmdEnd, line);
+            return Token.FromRangeInSource(lineNumber, actualRange.Start..cmdEnd, line);
         }
 
         public static StsRange GetActualRangeFromLine(string line, StsRange range, out StsRange? commentRange) {
@@ -121,7 +121,7 @@ namespace Infohazard.StillTimeScript.Core.Utility {
                 if (actualRange.Length <= 0) continue;
 
                 result.Append(" ");
-                result.Append(ReadTextToEnd(textLine.Line, actualRange, out isTextContinued).Text);
+                result.Append(ReadTextToEnd(textLine.LineNumber, textLine.Line, actualRange, out isTextContinued).Text);
             }
 
             if (result.Length > 0) {
@@ -129,7 +129,7 @@ namespace Infohazard.StillTimeScript.Core.Utility {
             }
         }
 
-        public static Token ReadTextToEnd(string line, StsRange range, out bool isContinued) {
+        public static Token ReadTextToEnd(int lineNumber, string line, StsRange range, out bool isContinued) {
             ReadOnlySpan<char> lineToEnd = line[..range.End].TrimEnd();
             isContinued = lineToEnd.EndsWith("\\");
             if (isContinued) {
@@ -138,7 +138,7 @@ namespace Infohazard.StillTimeScript.Core.Utility {
 
             int index = range.Start;
             SkipWhitespace(lineToEnd, ref index, null);
-            return new Token(new StsRange(index, lineToEnd.Length - index), lineToEnd[index..].ToString());
+            return new Token(lineNumber, new StsRange(index, lineToEnd.Length - index), lineToEnd[index..].ToString());
         }
 
         public static void ValidateTokens(
@@ -221,7 +221,7 @@ namespace Infohazard.StillTimeScript.Core.Utility {
                 }
             }
 
-            Token result = Token.FromRangeInSource(index..argEnd, line);
+            Token result = Token.FromRangeInSource(lineNumber, index..argEnd, line);
             index = argEnd;
             return result;
         }
