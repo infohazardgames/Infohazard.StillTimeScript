@@ -6,6 +6,7 @@ using System.Linq;
 using Infohazard.StillTimeScript.Core.Utility;
 using Infohazard.StillTimeScript.ViewModel;
 using Infohazard.StillTimeScript.ViewModel.Actions;
+using Infohazard.StillTimeScript.ViewModel.Annotations;
 using Infohazard.StillTimeScript.ViewModel.Data;
 using UnityEditor;
 using UnityEngine;
@@ -15,6 +16,7 @@ namespace StillTime.Editor.ScriptEditor {
     [UxmlElement]
     public partial class StsEditorTextArea : VisualElement {
         private const string TextAreaCursorClassName = "text-area--hover";
+        private const string TextAreaLinkCursorClassName = "text-area--hover-link";
         private const int LineNumberWidth = 50;
         private const int LineHeight = 20;
         private const string Indent = "    ";
@@ -71,6 +73,7 @@ namespace StillTime.Editor.ScriptEditor {
             _imguiContainer.RegisterCallback<DetachFromPanelEvent>(OnDetachFromPanel);
             _imguiContainer.RegisterCallback<MouseMoveEvent>(OnMouseMove);
             _imguiContainer.RegisterCallback<MouseDownEvent>(OnMouseDown);
+            _imguiContainer.RegisterCallback<ClickEvent>(OnClick);
             _imguiContainer.RegisterCallback<MouseUpEvent>(OnMouseUp);
             _imguiContainer.RegisterCallback<WheelEvent>(OnWheel);
             _verticalScroller.valueChanged += OnScrollValueChanged;
@@ -151,6 +154,26 @@ namespace StillTime.Editor.ScriptEditor {
             }
         }
 
+        private void OnClick(ClickEvent clickEvent) {
+            Rect r = _imguiContainer.contentRect;
+            Vector2 mousePos = clickEvent.localPosition;
+            Rect textCursorRect = new(r);
+            textCursorRect.xMin += LineNumberWidth;
+
+            bool isTextCursor = textCursorRect.Contains(mousePos);
+            
+            if (isTextCursor && clickEvent.clickCount == 1 && (clickEvent.commandKey || clickEvent.ctrlKey)) {
+                
+                StsCursorPos cursorPos = GetCursorPosition(mousePos);
+                DefinitionReferenceAnnotation? annotation = GetReferenceAtPosition(cursorPos);
+                if (annotation is { DefinitionToken: { } defToken  }) {
+                    ViewModel.CursorPosition = new StsCursorPos(defToken.LineNumber, defToken.Range.Start);
+                    ViewModel.Selection =
+                        new StsCursorRange(defToken.LineNumber, defToken.Range.Start, defToken.Range.End);
+                }
+            }
+        }
+
         private static bool IsWordChar(char c) {
             return char.IsLetterOrDigit(c) || c == '_';
         }
@@ -168,6 +191,15 @@ namespace StillTime.Editor.ScriptEditor {
         }
 
         private void OnMouseMove(MouseMoveEvent evt) {
+            UpdateCursor(evt);
+
+            if ((evt.pressedButtons & 1) != 0) {
+                ViewModel.CursorPosition = GetCursorPosition(evt.localMousePosition);
+                ViewModel.SelectionEnd = ViewModel.CursorPosition;
+            }
+        }
+
+        private void UpdateCursor(IMouseEvent evt) {
             Rect r = _imguiContainer.contentRect;
 
             Vector2 cursorPosition = evt.localMousePosition;
@@ -177,10 +209,16 @@ namespace StillTime.Editor.ScriptEditor {
             bool isTextCursor = textCursorRect.Contains(cursorPosition);
             _imguiContainer.EnableInClassList(TextAreaCursorClassName, isTextCursor);
 
-            if ((evt.pressedButtons & 1) != 0) {
-                ViewModel.CursorPosition = GetCursorPosition(evt.localMousePosition);
-                ViewModel.SelectionEnd = ViewModel.CursorPosition;
+            bool isLinkCursor = false;
+            if (isTextCursor && (evt.commandKey || evt.ctrlKey)) {
+                StsCursorPos cursorPos = GetCursorPosition(evt.localMousePosition);
+                DefinitionReferenceAnnotation? reference = GetReferenceAtPosition(cursorPos);
+                if (reference != null) {
+                    isLinkCursor = true;
+                }
             }
+            
+            _imguiContainer.EnableInClassList(TextAreaLinkCursorClassName, isLinkCursor);
         }
 
         private void OnWheel(WheelEvent evt) {
@@ -282,20 +320,29 @@ namespace StillTime.Editor.ScriptEditor {
             }
 
             _minBlinkTime = Time.realtimeSinceStartup + BlinkCooldown;
-            int visibleLineCount = Mathf.FloorToInt(_imguiContainer.contentRect.height / LineHeight);
-            int maxVisibleLine = Mathf.FloorToInt(ViewModel.ScrollValue + visibleLineCount);
-
-            if (ViewModel.CursorLine < ViewModel.ScrollValue) {
-                _verticalScroller.value = ViewModel.CursorLine;
-            } else if (ViewModel.CursorLine > maxVisibleLine) {
-                _verticalScroller.value = ViewModel.CursorLine - visibleLineCount + 1;
-            }
-
             _imguiContainer.MarkDirtyRepaint();
         }
 
         private void OnGeometryChanged(GeometryChangedEvent evt) {
             UpdateScrollBar();
+        }
+
+        #endregion
+
+        #region Link Handling
+
+        private DefinitionReferenceAnnotation? GetReferenceAtPosition(StsCursorPos position) {
+            List<LineAnnotation>? annotations = ViewModel.GetAnnotations(position.Line);
+            if (annotations == null) return null;
+
+            foreach (DefinitionReferenceAnnotation annotation in annotations.OfType<DefinitionReferenceAnnotation>()) {
+                StsRange range = annotation.Range;
+                if (position.Column >= range.Start && position.Column <= range.End) {
+                    return annotation;
+                }
+            }
+
+            return null;
         }
 
         #endregion
@@ -323,6 +370,16 @@ namespace StillTime.Editor.ScriptEditor {
         private void OnViewModelCursorChanged(StsCursorPos cursor) {
             _minBlinkTime = Time.realtimeSinceStartup + BlinkCooldown;
             _cursorBlinkState = true;
+            
+            int visibleLineCount = Mathf.FloorToInt(_imguiContainer.contentRect.height / LineHeight);
+            int maxVisibleLine = Mathf.FloorToInt(ViewModel.ScrollValue + visibleLineCount);
+
+            if (ViewModel.CursorLine < ViewModel.ScrollValue) {
+                _verticalScroller.value = ViewModel.CursorLine;
+            } else if (ViewModel.CursorLine > maxVisibleLine) {
+                _verticalScroller.value = ViewModel.CursorLine - visibleLineCount + 1;
+            }
+
             _imguiContainer.MarkDirtyRepaint();
         }
 
@@ -380,7 +437,11 @@ namespace StillTime.Editor.ScriptEditor {
         }
 
         private void InsertText(string text) {
-            ActionStack.ExecuteAction(ChangeText.Replace(ViewModel, ViewModel.Selection, text));
+            if (ViewModel.SelectionActive) {
+                ActionStack.ExecuteAction(ChangeText.Replace(ViewModel, ViewModel.Selection, text));   
+            } else {
+                ActionStack.ExecuteAction(ChangeText.Insert(ViewModel.CursorPosition, text));
+            }
         }
 
         private void InsertTextBeforeSelectedLines(string text) {

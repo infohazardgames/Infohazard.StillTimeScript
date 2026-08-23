@@ -23,8 +23,8 @@ namespace Infohazard.StillTimeScript.ViewModel.Actions {
 
             OriginalSelection = _originalRange;
             OriginalCursorPosition = _originalRange.End;
-            NewSelection = _newRange;
-            NewCursorPosition = _newRange.End;
+            NewSelection = new StsCursorRange(_newRange.Max, _newRange.Max);
+            NewCursorPosition = _newRange.Max;
         }
 
         public void Execute(StsDocumentViewModel viewModel) {

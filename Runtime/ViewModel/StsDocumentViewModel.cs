@@ -19,6 +19,7 @@ namespace Infohazard.StillTimeScript.ViewModel {
         private StsCursorRange? _selection;
         private int _rememberedCursorColumn;
         private float _scrollValue;
+        private bool _selectionActive;
 
         private static readonly string[] LineSeparators = { "\r\n", "\n", "\r" };
 
@@ -53,7 +54,7 @@ namespace Infohazard.StillTimeScript.ViewModel {
             set => CursorPosition = new StsCursorPos(CursorPosition.Line, value);
         }
 
-        public bool SelectionActive { get; private set; }
+        public bool SelectionActive => _selectionActive && !Selection.IsEmpty;
 
         public StsCursorPos SelectionStart {
             get => _selection?.Start ?? StsCursorPos.Zero;
@@ -75,7 +76,7 @@ namespace Infohazard.StillTimeScript.ViewModel {
                 if (value == _selection) return;
 
                 _selection = value;
-                SelectionActive = true;
+                _selectionActive = true;
                 SelectionChanged?.Invoke(value);
             }
         }
@@ -219,7 +220,7 @@ namespace Infohazard.StillTimeScript.ViewModel {
 
         public void ClearSelection() {
             _selection = null;
-            SelectionActive = false;
+            _selectionActive = false;
             SelectionChanged?.Invoke(StsCursorRange.Empty);
         }
 
@@ -235,7 +236,7 @@ namespace Infohazard.StillTimeScript.ViewModel {
         }
 
         public string? GetText(StsCursorRange range) {
-            if (!SelectionActive) return null;
+            if (range.IsEmpty) return null;
 
             StsCursorPos min = range.Min;
             StsCursorPos max = range.Max;

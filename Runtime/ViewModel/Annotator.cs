@@ -74,9 +74,26 @@ namespace Infohazard.StillTimeScript.ViewModel {
                 }
             }
 
+            foreach (IResourceCommand resourceCommand in commands.OfType<IResourceCommand>()) {
+                try {
+                    resourceCommand.ValidateResources(graphData);
+                } catch (Exception) {
+                    // Not able to handle exception here yet.
+                }
+            }
+            
+            Dictionary<string, Token> definitionTokens = new();
+            foreach (ICommand command in commands) {
+                foreach (CommandToken commandToken in command.EnumerateTokens()) {
+                    if (commandToken.Type != CommandTokenType.Definition) continue;
+                    definitionTokens.TryAdd(commandToken.Token.Text, commandToken.Token);
+                }
+            }
+
             foreach (ICommand command in commands) {
                 List<LineAnnotation> lineAnnotations = annotations[command.LineNumber] ??= new List<LineAnnotation>();
-                HandleCommandTokens(command, graphData, lineAnnotations, command.EnumerateTokens().ToList());
+                HandleCommandTokens(command, graphData, definitionTokens,
+                    lineAnnotations, command.EnumerateTokens().ToList());
             }
 
             return annotations;
@@ -85,6 +102,7 @@ namespace Infohazard.StillTimeScript.ViewModel {
         private static void HandleCommandTokens(
             ICommand command,
             GraphData graphData,
+            Dictionary<string, Token> definitionTokens,
             List<LineAnnotation> lineAnnotations,
             List<CommandToken> commandTokens) {
             List<CommandToken> tempList = new();
@@ -96,7 +114,7 @@ namespace Infohazard.StillTimeScript.ViewModel {
                             ExpressionParser.ParseExpression(command, graphData, command.Line,
                                                              token.Token.Range, token.RequiredValueType, tempList);
 
-                            HandleCommandTokens(command, graphData, lineAnnotations, tempList);
+                            HandleCommandTokens(command, graphData, definitionTokens, lineAnnotations, tempList);
                         } catch (Exception ex) {
                             lineAnnotations.Add(new ErrorAnnotation(token.Token.Range, ex.Message));
                         }
@@ -108,7 +126,7 @@ namespace Infohazard.StillTimeScript.ViewModel {
                             ExpressionParser.ParseStringExpression(command, graphData, command.Line,
                                                                    token.Token.Range, tempList);
 
-                            HandleCommandTokens(command, graphData, lineAnnotations, tempList);
+                            HandleCommandTokens(command, graphData, definitionTokens, lineAnnotations, tempList);
                         } catch (Exception ex) {
                             lineAnnotations.Add(new ErrorAnnotation(token.Token.Range, ex.Message));
                         }
@@ -118,7 +136,11 @@ namespace Infohazard.StillTimeScript.ViewModel {
                         if (!graphData.Resources.ContainsKey(token.Token.Text)) {
                             lineAnnotations.Add(new ErrorAnnotation(token.Token.Range, "Resource not found"));
                         } else {
-                            lineAnnotations.Add(new DefinitionReferenceAnnotation(token.Token.Range));
+                            Token? definitionToken = definitionTokens.TryGetValue(token.Token.Text, out Token temp)
+                                ? temp
+                                : null;
+                            
+                            lineAnnotations.Add(new DefinitionReferenceAnnotation(token.Token.Range, definitionToken));
                         }
 
                         break;
@@ -126,7 +148,11 @@ namespace Infohazard.StillTimeScript.ViewModel {
                         if (!graphData.Nodes.ContainsKey(token.Token.Text)) {
                             lineAnnotations.Add(new ErrorAnnotation(token.Token.Range, "Label not found"));
                         } else {
-                            lineAnnotations.Add(new DefinitionReferenceAnnotation(token.Token.Range));
+                            Token? definitionToken = definitionTokens.TryGetValue(token.Token.Text, out Token temp)
+                                ? temp
+                                : null;
+                            
+                            lineAnnotations.Add(new DefinitionReferenceAnnotation(token.Token.Range, definitionToken));
                         }
 
                         break;

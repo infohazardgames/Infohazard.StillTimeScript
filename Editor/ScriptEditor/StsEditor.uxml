@@ -7,7 +7,7 @@
         </uie:Toolbar>
         <ui:VisualElement focusable="true" tabindex="-1" style="flex-grow: 1; flex-direction: row;">
             <ui:VisualElement focusable="true" tabindex="-1" style="flex-grow: 1; flex-direction: row;">
-                <StillTime.Editor.ScriptEditor.StsEditorTextArea gui-skin="project://database/Packages/com.infohazard.stilltimescript/Editor/ScriptEditor/ScriptEditorGUISkin.guiskin?fileID=11400000&amp;guid=629cf03372a582d4fb09b0c5363257c7&amp;type=2#ScriptEditorGUISkin" placeholder-lines="&lt;noparse&gt;iLI&lt;b&gt;ne 1 of the scri&lt;/b&gt;pt&lt;/noparse&gt;,Mline 2,Mline 2,Mline 2,Mline 2,Mline 2,Mline 2,Mline 2,Mline 2,Mline 2,Mline 2" focusable="true" tabindex="-1"/>
+                <StillTime.Editor.ScriptEditor.StsEditorTextArea gui-skin="project://database/Packages/com.infohazard.stilltimescript/Editor/ScriptEditor/ScriptEditorGUISkin.guiskin?fileID=11400000&amp;guid=629cf03372a582d4fb09b0c5363257c7&amp;type=2#ScriptEditorGUISkin" placeholder-lines="speaker(Me%2C #AA00FF): Me,say(Me): Hello dingus" focusable="true" tabindex="-1"/>
             </ui:VisualElement>
             <ui:TreeView tabindex="-1" style="flex-grow: 0;"/>
         </ui:VisualElement>

@@ -2,6 +2,9 @@
 
 namespace Infohazard.StillTimeScript.ViewModel.Annotations {
     public class DefinitionReferenceAnnotation : LineAnnotation {
-        public DefinitionReferenceAnnotation(StsRange range) : base(range) { }
+        public Token? DefinitionToken { get; }
+        public DefinitionReferenceAnnotation(StsRange range, Token? definitionToken) : base(range) {
+            DefinitionToken = definitionToken;
+        }
     }
 }

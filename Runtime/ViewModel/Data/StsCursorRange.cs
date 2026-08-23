@@ -11,6 +11,8 @@ namespace Infohazard.StillTimeScript.ViewModel.Data {
         public StsCursorPos Min => IsReverse ? End : Start;
 
         public StsCursorPos Max => IsReverse ? Start : End;
+        
+        public bool IsEmpty => Start == End;
 
         private static readonly string[] LineSeparators = { "\r\n", "\n", "\r" };
 
@@ -40,7 +42,7 @@ namespace Infohazard.StillTimeScript.ViewModel.Data {
                     if (!remaining.StartsWith(lineSeparator))  continue;
                     newLineCount++;
                     i += lineSeparator.Length - 1;
-                    lengthOfLastLine = remaining.Length;
+                    lengthOfLastLine = remaining.Length - lineSeparator.Length;
                     break;
                 }
             }

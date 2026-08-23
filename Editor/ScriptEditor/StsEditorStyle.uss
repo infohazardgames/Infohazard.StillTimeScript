@@ -1,3 +1,7 @@
 .text-area--hover {
     cursor: text;
 }
+
+.text-area--hover-link {
+    cursor: link;
+}
