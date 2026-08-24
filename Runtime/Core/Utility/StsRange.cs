@@ -19,6 +19,13 @@ namespace Infohazard.StillTimeScript.Core.Utility {
             }
         }
 
+        public readonly StsRange this[Range subRange] {
+            get {
+                (int offset, int length) = subRange.GetOffsetAndLength(Length);
+                return new StsRange(Start + offset, length);
+            }
+        }
+
         public StsRange(int start, int length) {
             Start = start;
             Length = Math.Max(0, length);

@@ -7,7 +7,7 @@ using Infohazard.StillTimeScript.Core.Utility;
 
 namespace Infohazard.StillTimeScript.Core.Parsers.Macros {
     public class MacroParameters {
-        private static readonly Regex InterpRegex = new(@"\$[0-9a-zA-Z_]+");
+        public static readonly Regex InterpRegex = new(@"\$[0-9a-zA-Z_]+");
 
         private readonly List<MacroParameter> _normalParameters;
         private readonly List<MacroParameter> _optionalParameters;
@@ -26,21 +26,21 @@ namespace Infohazard.StillTimeScript.Core.Parsers.Macros {
         }
 
         public MacroParameter? GetMacroParameter(string paramName) {
-            int paramIndex = _normalParameters.FindIndex(p => p.Name == paramName);
+            int paramIndex = _normalParameters.FindIndex(p => p.Name.Text == paramName);
             if (paramIndex >= 0) {
                 return _normalParameters[paramIndex];
             }
 
-            paramIndex = _optionalParameters.FindIndex(p => p.Name == paramName);
+            paramIndex = _optionalParameters.FindIndex(p => p.Name.Text == paramName);
             if (paramIndex >= 0) {
                 return _optionalParameters[paramIndex];
             }
 
-            if (_varArgsParameter.HasValue && _varArgsParameter.Value.Name == paramName) {
+            if (_varArgsParameter.HasValue && _varArgsParameter.Value.Name.Text == paramName) {
                 return _varArgsParameter;
             }
 
-            if (_textParameter.HasValue && _textParameter.Value.Name == paramName) {
+            if (_textParameter.HasValue && _textParameter.Value.Name.Text == paramName) {
                 return _textParameter;
             }
 
@@ -48,22 +48,22 @@ namespace Infohazard.StillTimeScript.Core.Parsers.Macros {
         }
 
         public string? GetParameterValue(string paramName, LineTokens tokens) {
-            int paramIndex = _normalParameters.FindIndex(p => p.Name == paramName);
+            int paramIndex = _normalParameters.FindIndex(p => p.Name.Text == paramName);
             if (paramIndex >= 0) {
                 return tokens.Arguments[paramIndex].Text;
             }
 
-            paramIndex = _optionalParameters.FindIndex(p => p.Name == paramName);
+            paramIndex = _optionalParameters.FindIndex(p => p.Name.Text == paramName);
             if (paramIndex >= 0) {
                 int indexInArgs = _normalParameters.Count + paramIndex;
                 if (indexInArgs < tokens.Arguments.Length) {
                     return tokens.Arguments[indexInArgs].Text;
                 } else {
-                    return _optionalParameters[paramIndex].DefaultValue;
+                    return _optionalParameters[paramIndex].DefaultValue?.Text;
                 }
             }
 
-            if (_varArgsParameter.HasValue && _varArgsParameter.Value.Name == paramName) {
+            if (_varArgsParameter.HasValue && _varArgsParameter.Value.Name.Text == paramName) {
                 int varArgStartIndex = _normalParameters.Count + _optionalParameters.Count;
                 if (varArgStartIndex < tokens.Arguments.Length) {
                     return string.Join(" ", tokens.Arguments[varArgStartIndex..].Select(t => t.Text));
@@ -72,7 +72,7 @@ namespace Infohazard.StillTimeScript.Core.Parsers.Macros {
                 }
             }
 
-            if (_textParameter.HasValue && _textParameter.Value.Name == paramName) {
+            if (_textParameter.HasValue && _textParameter.Value.Name.Text == paramName) {
                 return tokens.Text?.Text;
             }
 
@@ -103,8 +103,8 @@ namespace Infohazard.StillTimeScript.Core.Parsers.Macros {
                 callTokens,
                 minArgCount,
                 maxArgCount,
-                _textParameter is { DefaultValue: null },
-                _textParameter is { DefaultValue: not null });
+                _textParameter is { IsOptional: false },
+                _textParameter is { IsOptional: true });
         }
 
         public string EvaluateMacroLine(LineTokens callTokens, string macroLine, StsRange range) {
@@ -120,17 +120,37 @@ namespace Infohazard.StillTimeScript.Core.Parsers.Macros {
 
             return result;
         }
+        
+        public IEnumerable<CommandToken> EnumerateTokens() {
+            foreach (MacroParameter normalParameter in _normalParameters) {
+                yield return new CommandToken(normalParameter.Name, CommandTokenType.Definition);
+            }
+
+            foreach (MacroParameter optionalParameter in _optionalParameters) {
+                yield return new CommandToken(optionalParameter.Name, CommandTokenType.Definition);
+            }
+
+            if (_varArgsParameter.HasValue) {
+                yield return new CommandToken(_varArgsParameter.Value.Name, CommandTokenType.Definition);
+            }
+            
+            if (_textParameter.HasValue) {
+                yield return new CommandToken(_textParameter.Value.Name, CommandTokenType.Definition);
+            }
+        }
     }
 
     public struct MacroParameter {
-        public string Name { get; }
+        public Token Name { get; }
         public MacroParameterType Type { get; }
-        public string? DefaultValue { get; }
+        public Token? DefaultValue { get; }
+        public bool IsOptional { get; }
 
-        public MacroParameter(string name, MacroParameterType type, string? defaultValue = null) {
+        public MacroParameter(Token name, MacroParameterType type, Token? defaultValue, bool isOptional) {
             Name = name;
             Type = type;
             DefaultValue = defaultValue;
+            IsOptional = defaultValue.HasValue || isOptional;
         }
     }
 

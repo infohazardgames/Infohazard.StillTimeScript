@@ -15,12 +15,8 @@ namespace Infohazard.StillTimeScript.ViewModel {
         private List<List<LineAnnotation>?>? _annotations;
         private bool _needsToUpdateAnnotations;
         private int _deferralCount;
-        private StsCursorPos? _cursorPosition;
-        private StsCursorRange? _selection;
-        private int _rememberedCursorColumn;
+        private StsCursorRange _selection;
         private float _scrollValue;
-        private bool _selectionActive;
-
         private static readonly string[] LineSeparators = { "\r\n", "\n", "\r" };
 
         public IReadOnlyList<string> ScriptLines => _scriptLines;
@@ -28,55 +24,76 @@ namespace Infohazard.StillTimeScript.ViewModel {
         public bool IsModified { get; private set; }
 
         public bool CursorActive { get; private set; }
+        
+        public int RememberedCursorColumn { get; set; }
 
         public StsCursorPos CursorPosition {
-            get => _cursorPosition ?? StsCursorPos.Zero;
-            set {
-                if (value.Column < 0 || value.Line < 0 || value.Line >= _scriptLines.Count) {
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                }
-
-                if (_cursorPosition == value) return;
-                _rememberedCursorColumn = value.Column;
-                _cursorPosition = new StsCursorPos(value.Line, Math.Min(value.Column, _scriptLines[value.Line].Length));
-                CursorActive = true;
-                CursorChanged?.Invoke(CursorPosition);
-            }
+            get => _selection.End;
+            set => Selection = new StsCursorRange(value, value);
         }
 
         public int CursorLine {
-            get => _cursorPosition?.Line ?? 0;
-            set => CursorPosition = new StsCursorPos(value, _rememberedCursorColumn);
+            get => CursorPosition.Line;
+            set => CursorPosition = new StsCursorPos(value, RememberedCursorColumn);
         }
 
         public int CursorColumn {
-            get => _cursorPosition?.Column ?? 0;
+            get => CursorPosition.Column;
             set => CursorPosition = new StsCursorPos(CursorPosition.Line, value);
         }
 
-        public bool SelectionActive => _selectionActive && !Selection.IsEmpty;
+        public bool SelectionActive => CursorActive && !Selection.IsEmpty;
 
         public StsCursorPos SelectionStart {
-            get => _selection?.Start ?? StsCursorPos.Zero;
-            set => Selection = new StsCursorRange(value, SelectionEnd);
+            get => _selection.Start;
+            set => Selection =
+                new StsCursorRange(value, new StsCursorPos(_selection.End.Line, RememberedCursorColumn));
+        }
+
+        public int SelectionStartLine {
+            get => SelectionStart.Line;
+            set => SelectionStart = new StsCursorPos(value, SelectionStart.Column);
+        }
+
+        public int SelectionStartColumn {
+            get => SelectionStart.Column;
+            set => SelectionStart = new StsCursorPos(SelectionStart.Line, value);
         }
 
         public StsCursorPos SelectionEnd {
-            get => _selection?.End ?? StsCursorPos.Zero;
+            get => _selection.End;
             set => Selection = new StsCursorRange(SelectionStart, value);
+        }
+        
+        public int SelectionEndLine {
+            get => SelectionEnd.Line;
+            set => SelectionEnd = new StsCursorPos(value, RememberedCursorColumn);
+        }
+        
+        public int SelectionEndColumn {
+            get => SelectionEnd.Column;
+            set => SelectionEnd = new StsCursorPos(SelectionEnd.Line, value);
         }
 
         public StsCursorRange Selection {
-            get => _selection ?? StsCursorRange.Empty;
+            get => _selection;
             set {
-                if (!IsValidCursorPosition(value.Start) || !IsValidCursorPosition(value.End)) {
+                if (!IsValidCursorPosition(value.Start)) {
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                }
+                
+                if (value.End.Column < 0 || value.End.Line < 0 || value.End.Line >= _scriptLines.Count) {
                     throw new ArgumentOutOfRangeException(nameof(value));
                 }
 
-                if (value == _selection) return;
-
-                _selection = value;
-                _selectionActive = true;
+                if (value == _selection && CursorActive) return;
+                
+                RememberedCursorColumn = value.End.Column;
+                StsCursorPos endPos = new(value.End.Line,
+                    Math.Min(value.End.Column, _scriptLines[value.End.Line].Length));
+                
+                _selection = new StsCursorRange(value.Start, endPos);
+                CursorActive = true;
                 SelectionChanged?.Invoke(value);
             }
         }
@@ -99,7 +116,6 @@ namespace Infohazard.StillTimeScript.ViewModel {
         public event Action<StsRange>? LinesRemoved;
         public event Action<StsRange>? LinesModified;
         public event Action<StsCursorRange>? SelectionChanged;
-        public event Action<StsCursorPos>? CursorChanged;
         public event Action<float>? ScrollChanged;
 
         public StsDocumentViewModel(IEnumerable<string> scriptLines) {
@@ -218,9 +234,9 @@ namespace Infohazard.StillTimeScript.ViewModel {
             return new EventDeferral(this);
         }
 
-        public void ClearSelection() {
-            _selection = null;
-            _selectionActive = false;
+        public void ClearCursor() {
+            _selection = StsCursorRange.Empty;
+            CursorActive = false;
             SelectionChanged?.Invoke(StsCursorRange.Empty);
         }
 
@@ -229,6 +245,97 @@ namespace Infohazard.StillTimeScript.ViewModel {
                    value.Line < _scriptLines.Count &&
                    value.Column >= 0 &&
                    value.Column <= _scriptLines[value.Line].Length;
+        }
+
+        public void OffsetCursorColumn(int colDiff, bool moveOnlyEnd) {
+            (int line, int col) = CursorPosition;
+
+            int moveAmt = Math.Abs(colDiff);
+            int moveDir = Math.Sign(colDiff);
+            for (int i = 0; i < moveAmt; i++) {
+                if (moveDir < 0) {
+                    if (col > 0) {
+                        col--;
+                    } else if (line > 0) {
+                        line--;
+                        col = _scriptLines[line].Length;
+                    } else {
+                        break;
+                    }
+                } else {
+                    if (col < _scriptLines[line].Length) {
+                        col++;
+                    } else if (line < _scriptLines.Count - 1) {
+                        line++;
+                        col = 0;
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            if (moveOnlyEnd) {
+                SelectionEnd = new StsCursorPos(line, col);
+            } else {
+                CursorPosition = new StsCursorPos(line, col);
+            }
+        }
+        
+        public void OffsetCursorLine(int lineDiff, bool moveOnlyEnd) {
+            int line = CursorLine;
+            int col = RememberedCursorColumn;
+            
+            int moveAmt = Math.Abs(lineDiff);
+            int moveDir = Math.Sign(lineDiff);
+            for (int i = 0; i < moveAmt; i++) {
+                if (moveDir < 0) {
+                    if (line > 0) {
+                        line--;
+                    } else if (col > 0) {
+                        col = 0;
+                    } else {
+                        break;
+                    }
+                } else {
+                    if (line < _scriptLines.Count - 1) {
+                        line++;
+                    } else if (col < _scriptLines[line].Length) {
+                        col = _scriptLines[line].Length;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            
+            if (moveOnlyEnd) {
+                SelectionEnd = new StsCursorPos(line, col);
+            } else {
+                CursorPosition = new StsCursorPos(line, col);
+            }
+        }
+
+        public void SetCursorColumn(int value, bool moveOnlyEnd) {
+            if (moveOnlyEnd) {
+                SelectionEndColumn = value;
+            } else {
+                CursorColumn = value;
+            }
+        }
+        
+        public void SetCursorLine(int value, bool moveOnlyEnd) {
+            if (moveOnlyEnd) {
+                SelectionEndLine = value;
+            } else {
+                CursorLine = value;
+            }
+        }
+        
+        public void SetCursorPosition(StsCursorPos value, bool moveOnlyEnd) {
+            if (moveOnlyEnd) {
+                SelectionEnd = value;
+            } else {
+                CursorPosition = value;
+            }
         }
 
         public string? GetSelectedText() {

@@ -17,8 +17,7 @@
         Keyword,
         MacroCall,
         StringExpression,
-        ResourceReference,
-        NodeReference,
+        Reference,
         ColorLiteral,
         StringLiteral,
     }

@@ -2,14 +2,30 @@
     <Style src="project://database/Packages/com.infohazard.stilltimescript/Editor/ScriptEditor/StsEditorStyle.uss?fileID=7433441132597879392&amp;guid=2925d5e65eeedb64eb3db161a5cf027d&amp;type=3#StsEditorStyle"/>
     <ui:VisualElement name="EditorRoot" focusable="true" tabindex="-1" style="flex-grow: 1;">
         <uie:Toolbar tabindex="-1">
-            <uie:ToolbarMenu text="File"/>
-            <uie:ToolbarMenu text="Edit"/>
+            <uie:ToolbarMenu text="File" name="FileMenu"/>
+            <uie:ToolbarMenu text="Edit" name="EditMenu"/>
+            <uie:ToolbarSpacer/>
+            <uie:ToolbarButton text="←" name="BackButton"/>
+            <uie:ToolbarButton text="→" name="ForwardButton"/>
         </uie:Toolbar>
         <ui:VisualElement focusable="true" tabindex="-1" style="flex-grow: 1; flex-direction: row;">
-            <ui:VisualElement focusable="true" tabindex="-1" style="flex-grow: 1; flex-direction: row;">
+            <ui:VisualElement focusable="true" tabindex="-1" style="flex-grow: 1; flex-direction: column;">
+                <ui:VisualElement name="FindBar" style="background-color: rgb(32, 32, 32); border-top-left-radius: 5px; border-top-right-radius: 5px; border-bottom-right-radius: 5px; border-bottom-left-radius: 5px; margin-top: 2px; margin-right: 2px; margin-bottom: 2px; margin-left: 2px; flex-direction: column; padding-top: 2px; padding-right: 5px; padding-bottom: 2px; padding-left: 5px; align-items: stretch; display: none;">
+                    <ui:VisualElement style="flex-direction: row;">
+                        <ui:TextField placeholder-text="Find in file..." multiline="false" name="FindField" style="width: 250px; flex-shrink: 1;"/>
+                        <ui:Button text="↓" name="FindNextButton"/>
+                        <ui:Button text="↑" name="FindPrevButton"/>
+                        <ui:VisualElement style="flex-grow: 1;"/>
+                        <ui:Button text="X" name="CloseFindButton"/>
+                    </ui:VisualElement>
+                    <ui:VisualElement style="flex-direction: row;">
+                        <ui:TextField placeholder-text="Replace with..." multiline="false" name="ReplaceField" style="width: 250px; flex-shrink: 1;"/>
+                        <ui:Button text="Replace" name="ReplaceButton"/>
+                        <ui:Button text="Replace All" name="ReplaceAllButton"/>
+                    </ui:VisualElement>
+                </ui:VisualElement>
                 <StillTime.Editor.ScriptEditor.StsEditorTextArea gui-skin="project://database/Packages/com.infohazard.stilltimescript/Editor/ScriptEditor/ScriptEditorGUISkin.guiskin?fileID=11400000&amp;guid=629cf03372a582d4fb09b0c5363257c7&amp;type=2#ScriptEditorGUISkin" placeholder-lines="speaker(Me%2C #AA00FF): Me,say(Me): Hello dingus" focusable="true" tabindex="-1"/>
             </ui:VisualElement>
-            <ui:TreeView tabindex="-1" style="flex-grow: 0;"/>
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

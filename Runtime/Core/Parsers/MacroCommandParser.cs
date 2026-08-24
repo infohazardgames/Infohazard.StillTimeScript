@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Infohazard.StillTimeScript.Core.Commands;
 using Infohazard.StillTimeScript.Core.Commands.Interfaces;
 using Infohazard.StillTimeScript.Core.Parsers.Macros;
 using Infohazard.StillTimeScript.Core.Utility;
@@ -11,6 +12,10 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
     [CustomCommandParser("macro")]
     public class MacroCommandParser : ICommandParser {
         private static readonly string[] StopBeforeCommandsForIf = { "!else", "!elif", "!end" };
+
+        public static bool IsMacroCommand(string command) {
+            return command is "!if" or "!else" or "!elif" or "!end";
+        }
 
         public void ParseCommand(ParsingState state, List<ICommand> commands) {
             LineTokens tokens = Tokenizer.TokenizeAndAdvance(state);
@@ -24,6 +29,8 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
 
             Macro macro = new(identifier, macroParameters, subMacros);
             state.Macros.Add(identifier.Text, macro);
+            
+            commands.Add(new MacroCommand(tokens, macro));
         }
 
         private static MacroParameters ParseMacroParameters(LineTokens tokens) {
@@ -35,63 +42,83 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
 
             for (int i = 0; i < parameters.Length; i++) {
                 string param = parameters[i].Text;
-                string paramName;
+                StsRange range = parameters[i].Range;
+                StsRange paramRange;
                 MacroParameterType paramType;
-                string? defaultValue;
+                StsRange? defaultValueRange;
+                bool isOptional = false;
 
                 if (param.EndsWith("...")) {
-                    paramName = param[..^3];
+                    paramRange = range[..^3];
                     paramType = MacroParameterType.VarArg;
-                    defaultValue = string.Empty;
+                    defaultValueRange = null;
                 } else if (param.EndsWith("?")) {
-                    paramName = param[..^1];
+                    paramRange = range[..^1];
                     paramType = MacroParameterType.Regular;
-                    defaultValue = string.Empty;
+                    defaultValueRange = null;
+                    isOptional = true;
                 } else if (param.Contains('=')) {
                     int index = param.IndexOf('=');
-                    paramName = param[..index].Trim();
+                    paramRange = range[..index].Trim(tokens.OriginalLine);
                     paramType = MacroParameterType.Regular;
-                    defaultValue = param[(index + 1)..];
+                    defaultValueRange = range[(index + 1)..];
+                    isOptional = true;
                 } else {
-                    paramName = param;
+                    paramRange = range;
                     paramType = MacroParameterType.Regular;
-                    defaultValue = null;
+                    defaultValueRange = null;
                 }
 
-                if (!Tokenizer.IsValidCommandName(paramName)) {
+                Token paramToken = Token.FromRangeInSource(tokens.LineNumber, paramRange, tokens.OriginalLine);
+                Token? defaultValueToken = defaultValueRange == null
+                    ? null
+                    : Token.FromRangeInSource(tokens.LineNumber, defaultValueRange.Value, tokens.OriginalLine);
+                
+                if (!Tokenizer.IsValidCommandName(paramToken.Text)) {
                     throw new ParsingException(tokens.LineNumber, tokens.OriginalLine,
-                        $"Invalid macro parameter name '{paramName}'");
+                        $"Invalid macro parameter name '{paramRange}'");
                 }
 
                 if (paramType == MacroParameterType.VarArg) {
                     if (i == parameters.Length - 1) {
-                        varArgsParam = new MacroParameter(paramName, MacroParameterType.VarArg, defaultValue);
+                        varArgsParam = new MacroParameter(paramToken, MacroParameterType.VarArg, defaultValueToken,
+                            true);
                     } else {
                         throw new ParsingException(tokens.LineNumber, tokens.OriginalLine,
-                            $"VarArg parameter {paramName} only allowed as last parameter");
+                            $"VarArg parameter {paramRange} only allowed as last parameter");
                     }
                 } else {
-                    if (defaultValue != null) {
-                        optionalParams.Add(new MacroParameter(paramName, MacroParameterType.Regular, defaultValue));
+                    if (isOptional) {
+                        optionalParams.Add(new MacroParameter(paramToken, MacroParameterType.Regular, defaultValueToken,
+                            true));
                     } else {
                         if (optionalParams.Count == 0) {
-                            normalParams.Add(new MacroParameter(paramName, MacroParameterType.Regular));
+                            normalParams.Add(new MacroParameter(paramToken, MacroParameterType.Regular, null, false));
                         } else {
                             throw new ParsingException(
                                 tokens.LineNumber,
                                 tokens.OriginalLine,
-                                $"Non-optional parameter {paramName} not allowed after optional parameters.");
+                                $"Non-optional parameter {paramRange} not allowed after optional parameters.");
                         }
                     }
                 }
             }
 
             if (tokens.Text != null) {
-                if (Tokenizer.IsValidCommandName(tokens.Text.Value.Text)) {
-                    textParam = new MacroParameter(tokens.Text.Value.Text, MacroParameterType.Text, string.Empty);
+                Token textParameterToken = tokens.Text.Value;
+
+                bool isOptional = false;
+                if (textParameterToken.Text.EndsWith('?')) {
+                    textParameterToken = Token.FromRangeInSource(tokens.LineNumber, textParameterToken.Range[..^1],
+                        tokens.OriginalLine);
+                    isOptional = true;
+                }
+                
+                if (Tokenizer.IsValidCommandName(textParameterToken.Text)) {
+                    textParam = new MacroParameter(textParameterToken, MacroParameterType.Text, null, isOptional);
                 } else {
                     throw new ParsingException(tokens.LineNumber, tokens.OriginalLine,
-                        $"Invalid macro parameter name '{tokens.Text}'");
+                        $"Invalid macro parameter name '{textParameterToken.Text}'");
                 }
             }
 
@@ -119,14 +146,13 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                     }
                 }
 
-                ISubMacro? subMacro = ParseSubMacro(state, actualRange, macroParameters);
-                if (subMacro == null) break;
-
+                ISubMacro subMacro = ParseSubMacro(state, actualRange, macroParameters);
                 subMacros.Add(subMacro);
+                if (subMacro is EndSubMacro) break;
             }
         }
 
-        private static ISubMacro? ParseSubMacro(
+        private static ISubMacro ParseSubMacro(
             ParsingState state,
             StsRange actualRange,
             MacroParameters macroParameters) {
@@ -136,13 +162,13 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
 
             if (line.Line[actualRange.Start] != '!') {
                 line = state.MoveNext();
-                return new RegularLineSubMacro(macroParameters, line.Span.ToString());
+                return new RegularLineSubMacro(macroParameters, line.LineNumber, line.Span.ToString());
             } else {
                 LineTokens subTokens = Tokenizer.TokenizeAndAdvance(state);
                 switch (subTokens.Command.Text) {
                     case "!end":
                         Tokenizer.ValidateTokens(subTokens, 0, 0, false);
-                        return null;
+                        return new EndSubMacro(subTokens.Command);
                     case "!if":
                         Tokenizer.ValidateTokens(subTokens, 1, 100, false);
                         return ParseIfStatement(subTokens, state, macroParameters);
@@ -160,6 +186,7 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             MacroIf ifSection = ParseIf(ifStartTokens, state, macroParameters);
             List<MacroIf> elseIfs = new();
             List<ISubMacro> elseSection = new();
+            Token? elseToken = null;
 
             while (!state.IsEnded) {
                 ParsingState.LineInfo line = state.CurrentLine;
@@ -175,6 +202,7 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                 switch (subTokens.Command.Text) {
                     case "!end":
                         Tokenizer.ValidateTokens(subTokens, 0, 0, false);
+                        elseSection.Add(new EndSubMacro(subTokens.Command));
                         isEnd = true;
                         break;
                     case "!elif" when elseSection.Count == 0:
@@ -183,6 +211,7 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                         break;
                     case "!else" when elseSection.Count == 0:
                         Tokenizer.ValidateTokens(subTokens, 0, 0, false);
+                        elseToken = subTokens.Command;
                         ParseSubMacros(state, macroParameters, elseSection, StopBeforeCommandsForIf);
                         break;
                     default:
@@ -193,7 +222,7 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                 if (isEnd) break;
             }
 
-            return new IfStatementSubMacro(ifSection, elseIfs, elseSection);
+            return new IfStatementSubMacro(ifSection, elseIfs, elseToken, elseSection);
         }
 
         private static MacroIf ParseIf(
@@ -210,7 +239,7 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
 
             List<ISubMacro> ifSection = new();
             ParseSubMacros(state, macroParameters, ifSection, StopBeforeCommandsForIf);
-            return new MacroIf(macroParameters, conditions.ToList(), ifSection);
+            return new MacroIf(tokens.Command, macroParameters, conditions.ToList(), ifSection);
         }
     }
 }

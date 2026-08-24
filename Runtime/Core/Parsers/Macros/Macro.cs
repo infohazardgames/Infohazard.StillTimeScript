@@ -28,5 +28,19 @@ namespace Infohazard.StillTimeScript.Core.Parsers.Macros {
 
             state.PrependRange(expandedLines);
         }
+        
+        public IEnumerable<CommandToken> EnumerateTokens() {
+            yield return new CommandToken(Identifier, CommandTokenType.Definition);
+            
+            foreach (CommandToken token in _parameters.EnumerateTokens()) {
+                yield return token;
+            }
+
+            foreach (ISubMacro subMacro in _subMacros) {
+                foreach (CommandToken token in subMacro.EnumerateTokens()) {
+                    yield return token;
+                }
+            }
+        }
     }
 }

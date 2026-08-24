@@ -227,10 +227,10 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                 Tokenizer.EnsureNotAtEnd(command.LineNumber, command.Line, index, end);
                 if (endChars.Contains(line.AsSpan(index, 1), StringComparison.Ordinal)) break;
 
-                string? op = null;
+                Token? op = null;
                 foreach (string s in BinaryOperatorParsingPriority) {
                     if (!line.AsSpan(index, end.Value - index).StartsWith(s)) continue;
-                    op = s;
+                    op = new Token(command.LineNumber, new StsRange(index, s.Length), s);
                     break;
                 }
 
@@ -241,10 +241,15 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                         $"Encountered unexpected character(s) while parsing expression: {line[index..]}");
                 }
 
-                int operatorPrecedence = BinaryOperatorPrecedenceMap[op];
+                string opName = op.Value.Text;
+                int operatorPrecedence = BinaryOperatorPrecedenceMap[opName];
                 if (operatorPrecedence >= precedence) break;
 
-                index += op.Length;
+                if (char.IsLetter(opName[0])) {
+                    tokens?.Add(new CommandToken(op.Value, CommandTokenType.Keyword));
+                }
+
+                index += opName.Length;
                 Tokenizer.SkipWhitespace(line, ref index, end);
                 Tokenizer.EnsureNotAtEnd(command.LineNumber, command.Line, index, end);
                 IExpression nextOperand =
@@ -258,22 +263,22 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                         end,
                         tokens);
 
-                if (BinaryMathOperators.TryGetValue(op, out BinaryMathOperator binaryMathOperator)) {
+                if (BinaryMathOperators.TryGetValue(opName, out BinaryMathOperator binaryMathOperator)) {
                     currentOperand =
                         new BinaryMathExpression(currentOperand, nextOperand, binaryMathOperator);
-                } else if (NumberComparisonOperators.TryGetValue(op,
+                } else if (NumberComparisonOperators.TryGetValue(opName,
                                                                  out NumberComparisonOperator
                                                                      numberComparisonOperator)) {
                     currentOperand =
                         new NumberCompareExpression(currentOperand, nextOperand, numberComparisonOperator);
-                } else if (EqualityOperators.TryGetValue(op, out EqualityOperator equalityOperator)) {
+                } else if (EqualityOperators.TryGetValue(opName, out EqualityOperator equalityOperator)) {
                     currentOperand =
                         new EqualityExpression(currentOperand, nextOperand, equalityOperator);
-                } else if (BinaryLogicOperators.TryGetValue(op, out BinaryLogicOperator binaryLogicOperator)) {
+                } else if (BinaryLogicOperators.TryGetValue(opName, out BinaryLogicOperator binaryLogicOperator)) {
                     currentOperand =
                         new BinaryLogicExpression(currentOperand, nextOperand, binaryLogicOperator);
                 } else {
-                    throw new ParsingException(command.LineNumber, command.Line, $"Unexpected operator {op}");
+                    throw new ParsingException(command.LineNumber, command.Line, $"Unexpected operator {opName}");
                 }
             }
 
@@ -326,7 +331,11 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                 index += funcOp.Length;
                 List<Token> argumentTokens = Tokenizer.TokenizeArgumentList(command.LineNumber, line, ref index, end);
                 List<IExpression> arguments =
-                    argumentTokens.ConvertAll(arg => ParseExpression(command, graphData, line, arg.Range));
+                    argumentTokens.ConvertAll(arg =>
+                        ParseExpression(command, graphData, line, arg.Range, StsValueType.None, tokens));
+                
+                tokens?.Add(new CommandToken(Token.FromRangeInSource(command.LineNumber, funcOpRange, line),
+                    CommandTokenType.Keyword));
 
                 if (funcOp == VisitedFunction) {
                     if (arguments.Count != 2) {
@@ -357,9 +366,6 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
                         arguments.Count > 1 ? arguments[1] : null,
                         arguments.Count > 2 ? arguments[2] : null);
                 }
-
-                tokens?.Add(new CommandToken(Token.FromRangeInSource(command.LineNumber, funcOpRange, line),
-                                             CommandTokenType.Keyword));
             }
 
             int i;
@@ -394,15 +400,15 @@ namespace Infohazard.StillTimeScript.Core.Parsers {
             string itemStr = span.ToString();
             if (graphData.Resources.TryGetValue(itemStr, out Resource.Resource resource)) {
                 tokens?.Add(new CommandToken(Token.FromRangeInSource(command.LineNumber, range, line),
-                                             CommandTokenType.ResourceReference));
+                                             CommandTokenType.Reference));
                 if (resource is Variable variable) {
                     return new VariableExpression(variable);
                 } else {
                     return new ConstantExpression(new StsValue(resource));
                 }
             } else if (graphData.Nodes.TryGetValue(itemStr, out INode node)) {
-                tokens?.Add(new CommandToken(Token.FromRangeInSource(command.LineNumber, range, line),
-                                             CommandTokenType.NodeReference));
+                tokens?.Add(new CommandToken(Token.FromRangeInSource(command.LineNumber, range, line), 
+                    CommandTokenType.Reference));
                 return new ConstantExpression(new StsValue(node));
             } else {
                 throw new ParsingException(command.LineNumber, command.Line,

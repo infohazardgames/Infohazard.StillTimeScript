@@ -56,8 +56,10 @@ namespace StillTime.Editor {
                     continue;
 
                 try {
-                    ValidateScript(scriptPath);
-                    if (force) Debug.Log($"Script <color=green>{scriptPath}</color> validated clean.");
+                    bool clean = ValidateScript(scriptPath);
+                    if (force && clean) {
+                        Debug.Log($"Script <color=green>{scriptPath}</color> validated clean.");
+                    }
                 } catch (Exception ex) {
                     Debug.LogException(ex);
                 }
@@ -66,16 +68,18 @@ namespace StillTime.Editor {
             }
         }
 
-        private static void ValidateScript(string path) {
+        private static bool ValidateScript(string path) {
             try {
                 string scriptText = File.ReadAllText(path);
                 List<ICommand> commands = ScriptParser.ParseScript(scriptText);
                 GameGraph graph = GraphBuilder.BuildGraph(commands);
                 graph.Validate();
+                return true;
             } catch (ParsingException ex) {
                 string relativePath = Path.GetRelativePath(".", path);
                 int line = ex.LineNumber + 1;
                 Debug.LogError($"<a href=\"{relativePath}\" line=\"{line}\">{relativePath}</a>: {ex}");
+                return false;
             }
         }
     }

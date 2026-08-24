@@ -6,6 +6,9 @@ namespace Infohazard.StillTimeScript.ViewModel.Actions {
 
         private readonly List<IStsDocumentAction> _undoStack = new();
         private readonly List<IStsDocumentAction> _redoStack = new();
+        
+        public bool CanUndo => _undoStack.Count > 0;
+        public bool CanRedo => _redoStack.Count > 0;
 
         public ActionStack(StsDocumentViewModel viewModel) {
             _viewModel = viewModel;

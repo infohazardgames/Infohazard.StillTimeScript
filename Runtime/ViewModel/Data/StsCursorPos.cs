@@ -12,6 +12,11 @@ namespace Infohazard.StillTimeScript.ViewModel.Data {
             Line = line;
             Column = column;
         }
+        
+        public void Deconstruct(out int line, out int column) {
+            line = Line;
+            column = Column;
+        }
 
         public bool Equals(StsCursorPos other) {
             return Line == other.Line && Column == other.Column;

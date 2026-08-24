@@ -26,6 +26,8 @@ namespace StillTime.Editor.ScriptEditor {
         private readonly IMGUIContainer _imguiContainer;
         private readonly Scroller _verticalScroller;
         private readonly List<string?> _formattedLines = new();
+        private readonly List<(float, StsCursorRange)> _navigationStack = new();
+        private int _navigationIndex;
 
         private bool _cursorBlinkState;
         private int _clickCount;
@@ -86,7 +88,6 @@ namespace StillTime.Editor.ScriptEditor {
             ViewModel.LinesInserted += OnViewModelLinesInserted;
             ViewModel.LinesModified += OnViewModelLinesModified;
             ViewModel.LinesRemoved += OnViewModelLinesRemoved;
-            ViewModel.CursorChanged += OnViewModelCursorChanged;
             ViewModel.SelectionChanged += OnViewModelSelectionChanged;
             ViewModel.ScrollChanged += OnViewModelScrollChanged;
         }
@@ -106,24 +107,27 @@ namespace StillTime.Editor.ScriptEditor {
         }
 
         private void Update() {
-            if (!ViewModel.CursorActive) return;
-
-            float time = Time.realtimeSinceStartup;
-            bool blink = time < _minBlinkTime || time % 1 > 0.5f;
-            if (blink == _cursorBlinkState) return;
-
-            _cursorBlinkState = blink;
-            _imguiContainer.MarkDirtyRepaint();
+            bool changed = false;
+            if (ViewModel.CursorActive) {
+                float time = Time.realtimeSinceStartup;
+                bool blink = time < _minBlinkTime || time % 1 > 0.5f;
+                if (blink == _cursorBlinkState) return;
+                _cursorBlinkState = blink;
+                changed = true;
+            }
+            
+            if (changed) {
+                _imguiContainer.MarkDirtyRepaint();
+            }
         }
 
         private void OnMouseDown(MouseDownEvent evt) {
             if (evt.button == 0) {
                 _clickCount = evt.clickCount;
                 StsCursorPos cursorPos = GetCursorPosition(evt.localMousePosition);
-                ViewModel.CursorPosition = cursorPos;
 
-                if (evt.clickCount == 1) {
-                    ViewModel.Selection = new StsCursorRange(cursorPos, cursorPos);
+                if (evt.clickCount == 1 || evt.shiftKey) {
+                    ViewModel.SetCursorPosition(cursorPos, evt.shiftKey);
                 } else if (evt.clickCount == 2) {
                     string line = ViewModel.ScriptLines[cursorPos.Line];
 
@@ -146,11 +150,14 @@ namespace StillTime.Editor.ScriptEditor {
                     }
 
                     ViewModel.Selection = new StsCursorRange(cursorPos.Line, wordStart, wordEnd);
-                    ViewModel.CursorPosition = ViewModel.SelectionEnd;
                 } else if (evt.clickCount == 3) {
                     string line = ViewModel.ScriptLines[cursorPos.Line];
                     ViewModel.Selection = new StsCursorRange(cursorPos.Line, 0, line.Length);
                 }
+            } else if (evt.button == 3) {
+                GoBack();
+            } else if (evt.button == 4) {
+                GoForward();
             }
         }
 
@@ -163,10 +170,13 @@ namespace StillTime.Editor.ScriptEditor {
             bool isTextCursor = textCursorRect.Contains(mousePos);
             
             if (isTextCursor && clickEvent.clickCount == 1 && (clickEvent.commandKey || clickEvent.ctrlKey)) {
-                
                 StsCursorPos cursorPos = GetCursorPosition(mousePos);
                 DefinitionReferenceAnnotation? annotation = GetReferenceAtPosition(cursorPos);
-                if (annotation is { DefinitionToken: { } defToken  }) {
+                if (annotation is { DefinitionToken: { } defToken }) {
+                    _navigationStack.RemoveRange(_navigationIndex, _navigationStack.Count - _navigationIndex);
+                    _navigationStack.Add((_verticalScroller.value, ViewModel.Selection));
+                    _navigationIndex = _navigationStack.Count;
+                    
                     ViewModel.CursorPosition = new StsCursorPos(defToken.LineNumber, defToken.Range.Start);
                     ViewModel.Selection =
                         new StsCursorRange(defToken.LineNumber, defToken.Range.Start, defToken.Range.End);
@@ -180,13 +190,7 @@ namespace StillTime.Editor.ScriptEditor {
 
         private void OnMouseUp(MouseUpEvent evt) {
             if (evt.button == 0 && _clickCount == 1) {
-                ViewModel.CursorPosition = GetCursorPosition(evt.localMousePosition);
-
-                if (ViewModel.CursorPosition == ViewModel.SelectionStart) {
-                    ViewModel.ClearSelection();
-                } else {
-                    ViewModel.SelectionEnd = ViewModel.CursorPosition;
-                }
+                ViewModel.SelectionEnd = GetCursorPosition(evt.localMousePosition);
             }
         }
 
@@ -194,8 +198,7 @@ namespace StillTime.Editor.ScriptEditor {
             UpdateCursor(evt);
 
             if ((evt.pressedButtons & 1) != 0) {
-                ViewModel.CursorPosition = GetCursorPosition(evt.localMousePosition);
-                ViewModel.SelectionEnd = ViewModel.CursorPosition;
+                ViewModel.SelectionEnd = GetCursorPosition(evt.localMousePosition);
             }
         }
 
@@ -261,55 +264,42 @@ namespace StillTime.Editor.ScriptEditor {
                     }
                 }
             } else if (evt.keyCode == KeyCode.LeftArrow) {
-                if (ViewModel.CursorColumn > 0) {
-                    ViewModel.CursorColumn--;
-                } else if (ViewModel.CursorLine > 0) {
-                    ViewModel.CursorPosition =
-                        new StsCursorPos(ViewModel.CursorLine - 1, Lines[ViewModel.CursorLine - 1].Length);
+                if (ViewModel.SelectionActive && !evt.shiftKey) {
+                    ViewModel.CursorPosition = ViewModel.Selection.Min;
+                } else {
+                    ViewModel.OffsetCursorColumn(-1, evt.shiftKey);
                 }
             } else if (evt.keyCode == KeyCode.RightArrow) {
-                if (ViewModel.CursorColumn < Lines[ViewModel.CursorLine].Length) {
-                    ViewModel.CursorColumn++;
-                } else if (ViewModel.CursorLine < Lines.Count - 1) {
-                    ViewModel.CursorPosition = new StsCursorPos(ViewModel.CursorLine + 1, 0);
+                if (ViewModel.SelectionActive && !evt.shiftKey) {
+                    ViewModel.CursorPosition = ViewModel.Selection.Max;
+                } else {
+                    ViewModel.OffsetCursorColumn(1, evt.shiftKey);
                 }
             } else if (evt.keyCode == KeyCode.UpArrow) {
-                if (ViewModel.CursorLine > 0) {
-                    ViewModel.CursorLine--;
-                } else {
-                    ViewModel.CursorPosition = StsCursorPos.Zero;
-                }
+                ViewModel.OffsetCursorLine(-1, evt.shiftKey);
             } else if (evt.keyCode == KeyCode.DownArrow) {
-                if (ViewModel.CursorLine < Lines.Count - 1) {
-                    ViewModel.CursorLine++;
-                } else {
-                    ViewModel.CursorPosition = ViewModel.EndPosition;
-                }
+                ViewModel.OffsetCursorLine(1, evt.shiftKey);
             } else if (evt.keyCode == KeyCode.End) {
-                if (!evt.shiftKey) {
-                    ViewModel.CursorColumn = Lines[ViewModel.CursorLine].Length;
+                if (evt is { ctrlKey: false, commandKey: false }) {
+                    ViewModel.SetCursorColumn(Lines[ViewModel.CursorLine].Length, evt.shiftKey);
                 } else {
-                    ViewModel.CursorPosition = ViewModel.EndPosition;
+                    ViewModel.SetCursorPosition(ViewModel.EndPosition, evt.shiftKey);
                 }
             } else if (evt.keyCode == KeyCode.Home) {
-                if (!evt.shiftKey) {
-                    ViewModel.CursorColumn = 0;
+                if (evt is { ctrlKey: false, commandKey: false }) {
+                    ViewModel.SetCursorColumn(0, evt.shiftKey);
                 } else {
-                    ViewModel.CursorPosition = StsCursorPos.Zero;
+                    ViewModel.SetCursorPosition(StsCursorPos.Zero, evt.shiftKey);
                 }
             } else if (evt.ctrlKey || evt.commandKey) {
                 if (evt.keyCode == KeyCode.A) {
                     ViewModel.Selection = new StsCursorRange(StsCursorPos.Zero, ViewModel.EndPosition);
                 } else if (evt.keyCode == KeyCode.C) {
-                    string text = ViewModel.GetSelectedText() ?? string.Empty;
-                    GUIUtility.systemCopyBuffer = text;
+                    CopySelection();
                 } else if (evt.keyCode == KeyCode.X) {
-                    string text = ViewModel.GetSelectedText() ?? string.Empty;
-                    GUIUtility.systemCopyBuffer = text;
-                    DeleteSelection();
+                    CutSelection();
                 } else if (evt.keyCode == KeyCode.V) {
-                    string text = GUIUtility.systemCopyBuffer;
-                    InsertText(text);
+                    PasteClipboard();
                 } else if (evt is { keyCode: KeyCode.Z, shiftKey: false }) {
                     ActionStack.Undo();
                 } else if (evt.keyCode == KeyCode.Y || evt is { keyCode: KeyCode.Z, shiftKey: true }) {
@@ -329,7 +319,7 @@ namespace StillTime.Editor.ScriptEditor {
 
         #endregion
 
-        #region Link Handling
+        #region Navigation
 
         private DefinitionReferenceAnnotation? GetReferenceAtPosition(StsCursorPos position) {
             List<LineAnnotation>? annotations = ViewModel.GetAnnotations(position.Line);
@@ -337,12 +327,34 @@ namespace StillTime.Editor.ScriptEditor {
 
             foreach (DefinitionReferenceAnnotation annotation in annotations.OfType<DefinitionReferenceAnnotation>()) {
                 StsRange range = annotation.Range;
-                if (position.Column >= range.Start && position.Column <= range.End) {
+                if (position.Column >= range.Start && position.Column < range.End) {
                     return annotation;
                 }
             }
 
             return null;
+        }
+
+        public void GoBack() {
+            if (_navigationIndex <= 0) return;
+            if (_navigationIndex == _navigationStack.Count) {
+                _navigationStack.Add((_verticalScroller.value, ViewModel.Selection));
+            }
+
+            (float scroll, StsCursorRange selection) = _navigationStack[--_navigationIndex];
+            ViewModel.Selection = selection;
+            _verticalScroller.value = scroll;
+        }
+
+        public void GoForward() {
+            if (_navigationIndex >= _navigationStack.Count) return;
+            (float scroll, StsCursorRange selection) = _navigationStack[++_navigationIndex];
+            ViewModel.Selection = selection;
+            _verticalScroller.value = scroll;
+                    
+            if (_navigationIndex == _navigationStack.Count - 1) {
+                _navigationStack.RemoveAt(_navigationStack.Count - 1);
+            }
         }
 
         #endregion
@@ -367,23 +379,21 @@ namespace StillTime.Editor.ScriptEditor {
             _imguiContainer.MarkDirtyRepaint();
         }
 
-        private void OnViewModelCursorChanged(StsCursorPos cursor) {
-            _minBlinkTime = Time.realtimeSinceStartup + BlinkCooldown;
-            _cursorBlinkState = true;
-            
-            int visibleLineCount = Mathf.FloorToInt(_imguiContainer.contentRect.height / LineHeight);
-            int maxVisibleLine = Mathf.FloorToInt(ViewModel.ScrollValue + visibleLineCount);
+        private void OnViewModelSelectionChanged(StsCursorRange range) {
+            if (ViewModel.CursorActive) {
+                _minBlinkTime = Time.realtimeSinceStartup + BlinkCooldown;
+                _cursorBlinkState = true;
 
-            if (ViewModel.CursorLine < ViewModel.ScrollValue) {
-                _verticalScroller.value = ViewModel.CursorLine;
-            } else if (ViewModel.CursorLine > maxVisibleLine) {
-                _verticalScroller.value = ViewModel.CursorLine - visibleLineCount + 1;
+                int visibleLineCount = Mathf.FloorToInt(_imguiContainer.contentRect.height / LineHeight);
+                int maxVisibleLine = Mathf.FloorToInt(ViewModel.ScrollValue + visibleLineCount);
+
+                if (ViewModel.CursorLine < ViewModel.ScrollValue) {
+                    _verticalScroller.value = ViewModel.CursorLine;
+                } else if (ViewModel.CursorLine > maxVisibleLine) {
+                    _verticalScroller.value = ViewModel.CursorLine - visibleLineCount + 1;
+                }
             }
 
-            _imguiContainer.MarkDirtyRepaint();
-        }
-
-        private void OnViewModelSelectionChanged(StsCursorRange range) {
             _imguiContainer.MarkDirtyRepaint();
         }
 
@@ -396,6 +406,22 @@ namespace StillTime.Editor.ScriptEditor {
 
         #region Modification Commands
 
+        public void CutSelection() {
+            string text = ViewModel.GetSelectedText() ?? string.Empty;
+            GUIUtility.systemCopyBuffer = text;
+            DeleteSelection();
+        }
+
+        public void CopySelection() {
+            string text = ViewModel.GetSelectedText() ?? string.Empty;
+            GUIUtility.systemCopyBuffer = text;
+        }
+
+        public void PasteClipboard() {
+            string text = GUIUtility.systemCopyBuffer;
+            InsertText(text);
+        }
+        
         private void DeleteSelection() {
             ActionStack.ExecuteAction(ChangeText.Delete(ViewModel, ViewModel.Selection));
         }
@@ -437,11 +463,7 @@ namespace StillTime.Editor.ScriptEditor {
         }
 
         private void InsertText(string text) {
-            if (ViewModel.SelectionActive) {
-                ActionStack.ExecuteAction(ChangeText.Replace(ViewModel, ViewModel.Selection, text));   
-            } else {
-                ActionStack.ExecuteAction(ChangeText.Insert(ViewModel.CursorPosition, text));
-            }
+            ActionStack.ExecuteAction(ChangeText.Replace(ViewModel, ViewModel.Selection, text));
         }
 
         private void InsertTextBeforeSelectedLines(string text) {
