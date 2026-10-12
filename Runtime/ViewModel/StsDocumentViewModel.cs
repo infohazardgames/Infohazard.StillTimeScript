@@ -7,7 +7,6 @@ using System.Text;
 using Infohazard.StillTimeScript.Core.Utility;
 using Infohazard.StillTimeScript.ViewModel.Annotations;
 using Infohazard.StillTimeScript.ViewModel.Data;
-using UnityEngine;
 
 namespace Infohazard.StillTimeScript.ViewModel {
     public class StsDocumentViewModel : IDisposable {
@@ -24,7 +23,7 @@ namespace Infohazard.StillTimeScript.ViewModel {
         public bool IsModified { get; private set; }
 
         public bool CursorActive { get; private set; }
-        
+
         public int RememberedCursorColumn { get; set; }
 
         public StsCursorPos CursorPosition {
@@ -64,12 +63,12 @@ namespace Infohazard.StillTimeScript.ViewModel {
             get => _selection.End;
             set => Selection = new StsCursorRange(SelectionStart, value);
         }
-        
+
         public int SelectionEndLine {
             get => SelectionEnd.Line;
             set => SelectionEnd = new StsCursorPos(value, RememberedCursorColumn);
         }
-        
+
         public int SelectionEndColumn {
             get => SelectionEnd.Column;
             set => SelectionEnd = new StsCursorPos(SelectionEnd.Line, value);
@@ -81,17 +80,17 @@ namespace Infohazard.StillTimeScript.ViewModel {
                 if (!IsValidCursorPosition(value.Start)) {
                     throw new ArgumentOutOfRangeException(nameof(value));
                 }
-                
+
                 if (value.End.Column < 0 || value.End.Line < 0 || value.End.Line >= _scriptLines.Count) {
                     throw new ArgumentOutOfRangeException(nameof(value));
                 }
 
                 if (value == _selection && CursorActive) return;
-                
+
                 RememberedCursorColumn = value.End.Column;
                 StsCursorPos endPos = new(value.End.Line,
                     Math.Min(value.End.Column, _scriptLines[value.End.Line].Length));
-                
+
                 _selection = new StsCursorRange(value.Start, endPos);
                 CursorActive = true;
                 SelectionChanged?.Invoke(value);
@@ -280,11 +279,11 @@ namespace Infohazard.StillTimeScript.ViewModel {
                 CursorPosition = new StsCursorPos(line, col);
             }
         }
-        
+
         public void OffsetCursorLine(int lineDiff, bool moveOnlyEnd) {
             int line = CursorLine;
             int col = RememberedCursorColumn;
-            
+
             int moveAmt = Math.Abs(lineDiff);
             int moveDir = Math.Sign(lineDiff);
             for (int i = 0; i < moveAmt; i++) {
@@ -306,7 +305,7 @@ namespace Infohazard.StillTimeScript.ViewModel {
                     }
                 }
             }
-            
+
             if (moveOnlyEnd) {
                 SelectionEnd = new StsCursorPos(line, col);
             } else {
@@ -321,7 +320,7 @@ namespace Infohazard.StillTimeScript.ViewModel {
                 CursorColumn = value;
             }
         }
-        
+
         public void SetCursorLine(int value, bool moveOnlyEnd) {
             if (moveOnlyEnd) {
                 SelectionEndLine = value;
@@ -329,7 +328,7 @@ namespace Infohazard.StillTimeScript.ViewModel {
                 CursorLine = value;
             }
         }
-        
+
         public void SetCursorPosition(StsCursorPos value, bool moveOnlyEnd) {
             if (moveOnlyEnd) {
                 SelectionEnd = value;

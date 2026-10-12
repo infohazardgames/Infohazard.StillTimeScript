@@ -1,7 +1,22 @@
-.text-area--hover {
+.sts-text-area--hover {
     cursor: text;
 }
 
-.text-area--hover-link {
+.sts-text-area--hover-link {
     cursor: link;
+}
+
+.sts-find-bar{
+    margin: 2px;
+    padding: 2px 5px 2px 5px;
+    background-color: #202020;
+    border-radius: 5px;
+}
+
+.sts-find-bar__find-field {
+    width: 250px;
+}
+
+.sts-find-bar__replace-field {
+    width: 250px;
 }

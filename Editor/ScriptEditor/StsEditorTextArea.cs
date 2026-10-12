@@ -15,8 +15,8 @@ using UnityEngine.UIElements;
 namespace StillTime.Editor.ScriptEditor {
     [UxmlElement]
     public partial class StsEditorTextArea : VisualElement {
-        private const string TextAreaCursorClassName = "text-area--hover";
-        private const string TextAreaLinkCursorClassName = "text-area--hover-link";
+        private const string TextAreaCursorClassName = "sts-text-area--hover";
+        private const string TextAreaLinkCursorClassName = "sts-text-area--hover-link";
         private const int LineNumberWidth = 50;
         private const int LineHeight = 20;
         private const string Indent = "    ";
@@ -25,6 +25,7 @@ namespace StillTime.Editor.ScriptEditor {
         private float _charWidth;
         private readonly IMGUIContainer _imguiContainer;
         private readonly Scroller _verticalScroller;
+        private readonly StsEditorFindBar _findBar;
         private readonly List<string?> _formattedLines = new();
         private readonly List<(float, StsCursorRange)> _navigationStack = new();
         private int _navigationIndex;
@@ -47,6 +48,8 @@ namespace StillTime.Editor.ScriptEditor {
 
         public StsDocumentViewModel ViewModel { get; }
 
+        public StsDocumentFindReplaceViewModel ReplaceViewModel { get; }
+
         public ActionStack ActionStack { get; }
 
         private Vector2 ViewOffset => new(0, ViewModel.ScrollValue * LineHeight);
@@ -65,11 +68,23 @@ namespace StillTime.Editor.ScriptEditor {
                 direction = SliderDirection.Vertical,
             };
 
-            Add(_imguiContainer);
-            Add(_verticalScroller);
-
             style.flexGrow = 1;
-            style.flexDirection = FlexDirection.Row;
+
+            _findBar = new StsEditorFindBar();
+
+            VisualElement scrollArea = new() {
+                name = "scrollArea",
+                style = {
+                    flexDirection = FlexDirection.Row,
+                    flexGrow = 1,
+                },
+            };
+
+            scrollArea.Add(_imguiContainer);
+            scrollArea.Add(_verticalScroller);
+
+            Add(_findBar);
+            Add(scrollArea);
 
             _imguiContainer.RegisterCallback<AttachToPanelEvent>(OnAttachToPanel);
             _imguiContainer.RegisterCallback<DetachFromPanelEvent>(OnDetachFromPanel);
@@ -84,6 +99,9 @@ namespace StillTime.Editor.ScriptEditor {
 
             ViewModel = new StsDocumentViewModel(Enumerable.Empty<string>());
             ActionStack = new ActionStack(ViewModel);
+            ReplaceViewModel = new StsDocumentFindReplaceViewModel(ViewModel, ActionStack);
+
+            _findBar.ViewModel = ReplaceViewModel;
 
             ViewModel.LinesInserted += OnViewModelLinesInserted;
             ViewModel.LinesModified += OnViewModelLinesModified;
@@ -95,7 +113,7 @@ namespace StillTime.Editor.ScriptEditor {
         #region Event Handlers
 
         private void OnAttachToPanel(AttachToPanelEvent evt) {
-            _charWidth = GuiSkin.label.CalcSize(new GUIContent("A")).x;
+            _charWidth = GuiSkin?.label.CalcSize(new GUIContent("A")).x ?? 0;
             EditorApplication.update -= Update;
             EditorApplication.update += Update;
 
@@ -115,7 +133,7 @@ namespace StillTime.Editor.ScriptEditor {
                 _cursorBlinkState = blink;
                 changed = true;
             }
-            
+
             if (changed) {
                 _imguiContainer.MarkDirtyRepaint();
             }
@@ -168,7 +186,7 @@ namespace StillTime.Editor.ScriptEditor {
             textCursorRect.xMin += LineNumberWidth;
 
             bool isTextCursor = textCursorRect.Contains(mousePos);
-            
+
             if (isTextCursor && clickEvent.clickCount == 1 && (clickEvent.commandKey || clickEvent.ctrlKey)) {
                 StsCursorPos cursorPos = GetCursorPosition(mousePos);
                 DefinitionReferenceAnnotation? annotation = GetReferenceAtPosition(cursorPos);
@@ -176,7 +194,7 @@ namespace StillTime.Editor.ScriptEditor {
                     _navigationStack.RemoveRange(_navigationIndex, _navigationStack.Count - _navigationIndex);
                     _navigationStack.Add((_verticalScroller.value, ViewModel.Selection));
                     _navigationIndex = _navigationStack.Count;
-                    
+
                     ViewModel.CursorPosition = new StsCursorPos(defToken.LineNumber, defToken.Range.Start);
                     ViewModel.Selection =
                         new StsCursorRange(defToken.LineNumber, defToken.Range.Start, defToken.Range.End);
@@ -220,7 +238,7 @@ namespace StillTime.Editor.ScriptEditor {
                     isLinkCursor = true;
                 }
             }
-            
+
             _imguiContainer.EnableInClassList(TextAreaLinkCursorClassName, isLinkCursor);
         }
 
@@ -291,6 +309,8 @@ namespace StillTime.Editor.ScriptEditor {
                 } else {
                     ViewModel.SetCursorPosition(StsCursorPos.Zero, evt.shiftKey);
                 }
+            } else if (evt.keyCode == KeyCode.Escape && _findBar.Show) {
+                _findBar.Show = false;
             } else if (evt.ctrlKey || evt.commandKey) {
                 if (evt.keyCode == KeyCode.A) {
                     ViewModel.Selection = new StsCursorRange(StsCursorPos.Zero, ViewModel.EndPosition);
@@ -304,10 +324,21 @@ namespace StillTime.Editor.ScriptEditor {
                     ActionStack.Undo();
                 } else if (evt.keyCode == KeyCode.Y || evt is { keyCode: KeyCode.Z, shiftKey: true }) {
                     ActionStack.Redo();
+                } else if (evt.keyCode == KeyCode.F) {
+                    _findBar.Show = true;
+                    _findBar.FindField.Focus();
+                } else if (evt.keyCode == KeyCode.R) {
+                    _findBar.Show = true;
+                    _findBar.ReplaceField.Focus();
                 }
             } else if (evt.character is not ('\t' or '\0' or '\n')) {
                 InsertText(evt.character.ToString());
+            } else {
+                return;
             }
+
+            // Stop Unity from processing the event as an editor command.
+            evt.StopPropagation();
 
             _minBlinkTime = Time.realtimeSinceStartup + BlinkCooldown;
             _imguiContainer.MarkDirtyRepaint();
@@ -351,7 +382,7 @@ namespace StillTime.Editor.ScriptEditor {
             (float scroll, StsCursorRange selection) = _navigationStack[++_navigationIndex];
             ViewModel.Selection = selection;
             _verticalScroller.value = scroll;
-                    
+
             if (_navigationIndex == _navigationStack.Count - 1) {
                 _navigationStack.RemoveAt(_navigationStack.Count - 1);
             }
@@ -421,7 +452,7 @@ namespace StillTime.Editor.ScriptEditor {
             string text = GUIUtility.systemCopyBuffer;
             InsertText(text);
         }
-        
+
         private void DeleteSelection() {
             ActionStack.ExecuteAction(ChangeText.Delete(ViewModel, ViewModel.Selection));
         }
@@ -629,7 +660,7 @@ namespace StillTime.Editor.ScriptEditor {
                     DrawTextLine(lineRect, GetFormattedLine(i));
                 }
 
-                if (ViewModel.CursorActive) {
+                if (ViewModel.CursorActive && focusController.focusedElement == this) {
                     DrawCursor();
                 }
 

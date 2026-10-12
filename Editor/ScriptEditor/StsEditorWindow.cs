@@ -62,8 +62,10 @@ namespace StillTime.Editor.ScriptEditor
             SetupEditMenu();
             _backButton.clicked += _textArea.GoBack;
             _forwardButton.clicked += _textArea.GoForward;
+
+            _editorRootElement.dataSource = _textArea.ViewModel;
         }
-        
+
         private void SetupFileMenu() {
             _fileMenu.SetEnabled(true);
             _fileMenu.menu.AppendAction("Save", _ => SaveFile(), _ => _textArea.ViewModel.IsModified
@@ -116,7 +118,7 @@ namespace StillTime.Editor.ScriptEditor
             string path = EditorUtility.SaveFilePanelInProject("Save File",
                 Path.GetFileNameWithoutExtension(_scriptPath), "sts", "", Path.GetDirectoryName(_scriptPath));
             if (path == null) return;
-            
+
             _scriptPath = path;
             titleContent = new GUIContent(Path.GetFileName(_scriptPath));
             File.WriteAllLines(_scriptPath, _textArea.ViewModel.ScriptLines);
